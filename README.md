@@ -37,6 +37,11 @@ almost nothing.
   1. `dictionary.json` — canonical field keys ↔ every wording they appear as, plus **question→answer memory**
   2. `sites/<host>.json` — per-site `label → canonical`, control kind, recipe, ok/fail counters
   3. `runs.jsonl` — append-only run log
+- **Long jobs go straight to CDP** (`cdp.mjs`) — the agent-side MCP tools cap `evaluate` at 60s and scope
+  page ownership to the MCP session, so a multi-minute fill loses its tabs mid-run. `scripts/cdp.mjs` talks
+  to the browser's own CDP port (default `127.0.0.1:9110`, read from the browser's `config.json`) instead:
+  no ownership guard, no 60s cap, one tab, and real `Input.dispatchMouseEvent` clicks for hover-only
+  controls. See `references/strategies.md` §8.
 - **Privacy by design** — personal data never enters the repo: the profile and all memory live in the
   skill's own `data/` directory (the runtime environment), which is gitignored. Override with `$JAA_DATA_DIR`.
 
@@ -80,6 +85,7 @@ scripts/20_fill.js            # page: fill (submit buttons blocked)
 scripts/30_verify.py          # local: state vs profile/dictionary checks
 scripts/40_build_mapping.py   # local: compile mapping + human-question list
 scripts/90_memory.py          # local: site memory / Q&A memory / aliases / run log
+scripts/cdp.mjs               # local (Node): drive the browser over its native CDP port — for long jobs
 scripts/jaa_lib.py            # local: dictionary matching, profile lookup, format checks
 references/strategies.md      # widget recipes, heuristics, tool gotchas
 references/adapters/mokahr.md # site-specific notes (mokahr ATS)

@@ -24,6 +24,9 @@ metadata:
 ## 1. 准备（只做一次）
 
 - 工具：`browseros-neo` MCP（tabs/navigate/snapshot/act/evaluate/upload）+ 本机 `python`
+- ⚠️ **长任务必备**：`scripts/cdp.mjs` —— 直连浏览器原生 CDP 端口（默认 9110）驱动页面。
+  MCP 侧对 `evaluate` 有 60 秒硬超时、且会话一重建就丢失标签页归属（详见 `references/strategies.md` §8）；
+  凡是「一次要填十几条记录 / 跑几分钟」的站，直接用它，别用 MCP 硬扑。
 - **数据目录**：默认就是本 skill 运行环境自己的 `data/`（即 `scripts/` 的同级目录；
   从仓库直接跑就是 `<repo>/data/`）。首次运行会创建它，并从 `assets/` 播种
   `profile.json` 与运行期 `memory/dictionary.json`；可用 `$JAA_DATA_DIR` 指到别处。
@@ -111,6 +114,7 @@ python $SKILL/scripts/90_memory.py lookup --host <host>
 | `scripts/30_verify.py` | 本地 | 状态 vs 画像/字典 校验（格式/一致性/完整性/未映射） |
 | `scripts/40_build_mapping.py` | 本地 | 编译 uid→值 的映射 + 生成待问用户清单 |
 | `scripts/90_memory.py` | 本地 | 站点记忆 / 问答记忆 / 别名 / 运行日志（持续沉淀） |
+| `scripts/cdp.mjs` | 本地（Node 18+） | **直连浏览器原生 CDP（默认 127.0.0.1:9110）**：`port/list/open/eval/click/revalclick`；无归属校验、无 60 秒上限 —— 长任务、真实鼠标点击、React `onClick` 场景用它 |
 | `scripts/jaa_lib.py` | 本地 | 共用：字典匹配、画像取值、格式校验 |
 
 ## 4. 支持度与边界（诚实说明）
@@ -128,10 +132,12 @@ python $SKILL/scripts/90_memory.py lookup --host <host>
 
 | 坑 | 现象 | 处理 |
 |---|---|---|
-| 标签页归属 | `page N is not owned by this agent` | 一律 `tabs new` 自己的页（cookie 共享，登录态复用） |
+| 标签页归属 | `page N is not owned by this agent` | 一律 `tabs new` 自己的页（cookie 共享，登录态复用）。**但根因是 MCP 会话被换掉**：单次 `evaluate` 超过 60 秒、或长时间空闲都会触发；长任务改用 `scripts/cdp.mjs`（见 §8） |
 | evaluate 代码形状 | 返回 `undefined` | 代码按“函数体”执行，脚本必须**顶层 `return`**；别包成没 return 的 IIFE |
 | 输出截断 | 结果只到 5000 字符 | 完整结果在 `.browseros/tool-output/evaluate-*.txt` |
-| `browseros-neo_run` 不可用 | `did not return structured output` | 用 `evaluate` + 页面内 async |
+| `browseros-neo_run` 不可用 | `did not return structured output` | 用 `evaluate`；要跑几分钟就用 `scripts/cdp.mjs eval <targetId> <脚本文件>` |
+| 批量填充跑到一半就断 | `CDP request timed out: Runtime.evaluate`（约 60 秒） | 单次 `evaluate` ≤ 40 秒；整段的批量任务改走 `scripts/cdp.mjs`（无超时），中途把进度写进 `localStorage` 便于续做 |
+| 标签页越开越多且关不掉 | 每次会话重建只能 `tabs new`，旧页归属已死会话 | 用 `scripts/cdp.mjs open` 只开**一个**页；残留页请用户手动关（或重启浏览器） |
 | 静态草稿 | 有的站不存草稿、有的异步存 | 每步落盘；重进页面后重跑扫描+填充（幂等） |
 | 自定义组件取不到值 | `input.value` 是空 | 值在显示层：读 `[class*="display-value"]` / 最近的 label 文本 |
 | 必填判定 | 星号在字段块里，不在控件上 | 扫描器已做「字段块 + 星号/必填字样」判定，标注 `requiredConfidence`；medium/low 一律列进 todo 让人工确认 |
