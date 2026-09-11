@@ -23,6 +23,11 @@
 //   node cdp.mjs revalclick <id|url片段> <表达式文件> [waitMs]
 //                                            # 表达式返回一个元素，对它发真实鼠标点击
 //                                            # （适合「面板里的日期格子」这类每次渲染都换节点的目标）
+//   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
+//   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
+//                                            # 表达式返回「元素数组」，逐个真实点击（div 版单选/删除按钮）
+//                                            # 给 <input type=file> 选文件（DOM.setFileInputFiles，会触发 change）
+//                                            # 表达式文件返回该 file input，例如：(() => document.querySelectorAll('input[type=file]')[0])()
 //
 // 环境变量：CDP_PORT 覆盖端口；BROWSEROS_CONFIG 覆盖 config.json 路径。
 //
@@ -152,7 +157,12 @@ if (cmd === 'open') {
 if (cmd === 'eval') {
   const [sel, file, tmo] = args;
   if (!sel || !file) { console.error('usage: eval <id|url片段> <脚本文件> [timeoutMs]'); process.exit(1); }
-  const code = readFileSync(file, 'utf8');
+  const raw = readFileSync(file, 'utf8');
+  // skill 里的页面脚本（10_scan_form.js / 15_dump_state.js / 20_fill.js …）是按「函数体」写的（顶层 return），
+  // 直接当表达式会语法错误 → 不以 '(' 开头就自动包一层 async IIFE；本身已是表达式（(() => …)()）则原样执行。
+  const code = raw.trimStart().startsWith('(') ? raw : `(async () => {
+${raw}
+})()`;
   const page = await findPage(sel);
   const sock = await connect(page.webSocketDebuggerUrl);
   const res = await rpc(sock, 'Runtime.evaluate', {
@@ -210,6 +220,53 @@ if (cmd === 'revalclick') {
   process.exit(0);
 }
 
+if (cmd === 'upload') {
+  // 给 <input type=file> 设置本地文件（DOM.setFileInputFiles，等同真实选择文件并触发 change）
+  // 用法: node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
+  const [sel, exprFile, ...files] = args;
+  if (!sel || !exprFile || !files.length) { console.error('usage: upload <id|url片段> <表达式文件> <本地文件…>'); process.exit(1); }
+  const expr = readFileSync(exprFile, 'utf8');
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  const res = await rpc(sock, 'Runtime.evaluate', { expression: `(${expr})`, returnByValue: false, userGesture: true });
+  const objectId = res.result && res.result.objectId;
+  if (!objectId) { console.log(JSON.stringify({ ok: false, why: 'expression did not return an element' })); process.exit(0); }
+  await rpc(sock, 'DOM.setFileInputFiles', { files, objectId });
+  await new Promise(r => setTimeout(r, 600));
+  console.log(JSON.stringify({ ok: true, uploaded: files }));
+  process.exit(0);
+}
+
+if (cmd === 'clickn') {
+  // 批量真实点击：表达式返回「元素数组」，对每个元素 scrollIntoView → 取新坐标 → 发真实鼠标点击。
+  // 用途：div 版自定义单选/复选/删除按钮（合成 click() 不触发 React 代理事件）。
+  // 用法: node cdp.mjs clickn <id|url片段> <表达式文件> [每次点击后等待ms]
+  const [sel, exprFile, waitMs] = args;
+  if (!sel || !exprFile) { console.error('usage: clickn <id|url片段> <表达式文件> [waitMs]'); process.exit(1); }
+  const expr = readFileSync(exprFile, 'utf8');
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  const arrRes = await rpc(sock, 'Runtime.evaluate', { expression: `(${expr})`, returnByValue: false, userGesture: true });
+  const arrId = arrRes.result && arrRes.result.objectId;
+  if (!arrId) { console.log(JSON.stringify({ ok: false, why: 'expression did not return an array' })); process.exit(0); }
+  const props = await rpc(sock, 'Runtime.getProperties', { objectId: arrId, ownProperties: true });
+  const ids = props.result.filter(x => /^\d+$/.test(x.name) && x.value && x.value.objectId).map(x => x.value.objectId);
+  const clicked = [];
+  for (const id of ids) {
+    const r = await rpc(sock, 'Runtime.callFunctionOn', {
+      objectId: id,
+      functionDeclaration: `function(){ this.scrollIntoView({block:'center'}); const r=this.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height,t:(this.innerText||'').replace(/\s+/g,' ').trim().slice(0,14)}); }`,
+      returnByValue: true,
+    });
+    if (!r.result || !r.result.value) { clicked.push('(no-rect)'); continue; }
+    const box = JSON.parse(r.result.value);
+    await realClick(sock, box.x, box.y, Number(waitMs || 400));
+    clicked.push(box.t);
+  }
+  console.log(JSON.stringify({ ok: true, count: ids.length, clicked }));
+  process.exit(0);
+}
+
 console.error(`usage:
   node cdp.mjs port
   node cdp.mjs list
@@ -217,6 +274,8 @@ console.error(`usage:
   node cdp.mjs eval <id|url片段> <脚本文件> [timeoutMs]
   node cdp.mjs click <id|url片段> <CSS选择器> [waitMs]
   node cdp.mjs revalclick <id|url片段> <表达式文件> [waitMs]
+  node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
+  node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
 
 env: CDP_PORT=<port>   BROWSEROS_CONFIG=<path to .browseros/config.json>`);
 process.exit(1);
