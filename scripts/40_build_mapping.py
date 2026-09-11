@@ -86,8 +86,9 @@ def main():
             if not key:
                 key, conf, _alias = match_canonical(label, dictionary)
 
-        # 4) 问答记忆
-        if value is None and not key:
+        # 4) 问答记忆（⚠️ 只要「画像里没取到值」就查：canonical 别名匹配到但画像为空时也要回退，
+        #    否则站点特有提问（如「论文名称（如不涉及则填写为无）」）永远命中不了）
+        if value is None:
             qa_val, qconf, q = match_qa(label, dictionary)
             if qa_val is not None:
                 value, src, key = qa_val, f"qa({qconf})", "qa:" + q
