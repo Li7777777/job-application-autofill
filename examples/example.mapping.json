@@ -1,0 +1,26 @@
+{
+  "_readme": "脱敏样例：40_build_mapping.py 的输出。值是占位符，真实运行时会从你的 profile/记忆取值。",
+  "host": "app.example.com",
+  "mapping": {
+    "f1": "<意向工作城市>",
+    "f4": "<姓名>",
+    "f6": "<手机号>",
+    "f7": "<邮箱>",
+    "f8": "<男|女>",
+    "f9": "<YYYY-MM-DD>",
+    "f12": "<最高学历>",
+    "f14": "<渠道>",
+    "f16": "<是|否>"
+  },
+  "meta": {
+    "f1": {
+      "uid": "f1",
+      "label": "意向工作城市",
+      "kind": "custom-select",
+      "required": true,
+      "canonical": "job.intended_city",
+      "source": "profile"
+    }
+  },
+  "todo_count": 2
+}

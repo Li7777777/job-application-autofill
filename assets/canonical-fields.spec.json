@@ -1,0 +1,352 @@
+{
+  "_type": "field-spec",
+  "_readme": "通用字段规范（SPEC，非记忆）：canonical key ↔ 常见写法。仓库里只放这份规范；任何用户/站点学习到的内容（别名、问答、站点记忆、运行日志）都写在仓库之外的数据目录里（默认 ~/.job-application-autofill，见 jaa_lib.DATA_DIR）。",
+  "version": 1,
+  "updated_at": "2026-09-11",
+  "fields": {
+    "personal.name": {
+      "type": "text",
+      "aliases": [
+        "姓名",
+        "真实姓名",
+        "申请人姓名",
+        "name",
+        "full name",
+        "username"
+      ]
+    },
+    "personal.name_en": {
+      "type": "text",
+      "aliases": [
+        "英文名",
+        "拼音",
+        "name in english"
+      ]
+    },
+    "personal.phone": {
+      "type": "text",
+      "aliases": [
+        "手机",
+        "手机号",
+        "手机号码",
+        "联系电话",
+        "联系方式",
+        "移动电话",
+        "phone",
+        "mobile",
+        "tel",
+        "telephone"
+      ],
+      "format": "phone"
+    },
+    "personal.email": {
+      "type": "text",
+      "aliases": [
+        "邮箱",
+        "电子邮箱",
+        "电子邮件",
+        "e-mail",
+        "email",
+        "mail"
+      ],
+      "format": "email"
+    },
+    "personal.gender": {
+      "type": "choice",
+      "aliases": [
+        "性别",
+        "gender",
+        "sex"
+      ],
+      "options": [
+        "男",
+        "女"
+      ]
+    },
+    "personal.birth_date": {
+      "type": "date",
+      "aliases": [
+        "出生日期",
+        "出生年月",
+        "生日",
+        "出生年月日",
+        "birth",
+        "birthday",
+        "date of birth",
+        "dob"
+      ],
+      "format": "date"
+    },
+    "personal.id_number": {
+      "type": "text",
+      "aliases": [
+        "身份证",
+        "身份证号",
+        "证件号",
+        "证件号码",
+        "证件类型",
+        "id number",
+        "id card"
+      ],
+      "format": "id"
+    },
+    "personal.location": {
+      "type": "text",
+      "aliases": [
+        "所在地",
+        "现居地",
+        "现居住地",
+        "居住地",
+        "所在城市",
+        "location",
+        "city",
+        "current city"
+      ]
+    },
+    "personal.address": {
+      "type": "text",
+      "aliases": [
+        "联系地址",
+        "通讯地址",
+        "家庭住址",
+        "地址",
+        "address"
+      ]
+    },
+    "personal.political_status": {
+      "type": "choice",
+      "aliases": [
+        "政治面貌",
+        "political status"
+      ]
+    },
+    "personal.marital_status": {
+      "type": "choice",
+      "aliases": [
+        "婚姻状况",
+        "marital status"
+      ]
+    },
+    "personal.height": {
+      "type": "text",
+      "aliases": [
+        "身高",
+        "height"
+      ]
+    },
+    "personal.wechat": {
+      "type": "text",
+      "aliases": [
+        "微信",
+        "微信号",
+        "wechat"
+      ]
+    },
+    "personal.qq": {
+      "type": "text",
+      "aliases": [
+        "qq",
+        "qq号"
+      ]
+    },
+    "job.intended_city": {
+      "type": "text",
+      "aliases": [
+        "意向工作城市",
+        "期望工作城市",
+        "意向城市",
+        "意向地区",
+        "期望城市",
+        "工作地点意向",
+        "preferred city",
+        "desired location"
+      ]
+    },
+    "job.intended_role": {
+      "type": "text",
+      "aliases": [
+        "意向岗位",
+        "应聘岗位",
+        "期望职位",
+        "申请职位",
+        "position",
+        "job title"
+      ]
+    },
+    "job.expected_salary": {
+      "type": "text",
+      "aliases": [
+        "期望薪资",
+        "期望薪水",
+        "expected salary"
+      ]
+    },
+    "job.available_from": {
+      "type": "date",
+      "aliases": [
+        "到岗时间",
+        "可入职时间",
+        "最快到岗",
+        "available"
+      ]
+    },
+    "job.referral_code": {
+      "type": "text",
+      "aliases": [
+        "推荐码",
+        "内推码",
+        "referral",
+        "referral code"
+      ]
+    },
+    "job.source_channel": {
+      "type": "choice",
+      "aliases": [
+        "招聘信息获取渠道",
+        "获知渠道",
+        "信息来源",
+        "了解渠道",
+        "从哪里知道",
+        "how did you hear",
+        "source"
+      ]
+    },
+    "education.school": {
+      "type": "text",
+      "aliases": [
+        "学校名称",
+        "毕业院校",
+        "就读学校",
+        "院校",
+        "school",
+        "university"
+      ]
+    },
+    "education.major": {
+      "type": "text",
+      "aliases": [
+        "专业名称",
+        "所学专业",
+        "major"
+      ]
+    },
+    "education.degree": {
+      "type": "choice",
+      "aliases": [
+        "学历",
+        "学位",
+        "degree",
+        "education level"
+      ]
+    },
+    "education.start": {
+      "type": "date",
+      "aliases": [
+        "入学时间",
+        "就读时间起",
+        "开始时间"
+      ]
+    },
+    "education.end": {
+      "type": "date",
+      "aliases": [
+        "毕业时间",
+        "毕业年月",
+        "预计毕业时间",
+        "离校时间",
+        "graduation"
+      ]
+    },
+    "experience.company": {
+      "type": "text",
+      "aliases": [
+        "公司名称",
+        "公司",
+        "单位名称",
+        "company",
+        "employer"
+      ]
+    },
+    "experience.title": {
+      "type": "text",
+      "aliases": [
+        "职位名称",
+        "岗位名称",
+        "职务",
+        "title"
+      ]
+    },
+    "experience.duty": {
+      "type": "textarea",
+      "aliases": [
+        "工作职责",
+        "工作内容",
+        "职责描述",
+        "工作描述",
+        "duty",
+        "responsibility"
+      ]
+    },
+    "experience.leave_reason": {
+      "type": "text",
+      "aliases": [
+        "离职原因",
+        "leave reason"
+      ]
+    },
+    "project.name": {
+      "type": "text",
+      "aliases": [
+        "项目名称",
+        "project name"
+      ]
+    },
+    "project.desc": {
+      "type": "textarea",
+      "aliases": [
+        "项目描述",
+        "项目内容",
+        "项目职责",
+        "project description"
+      ]
+    },
+    "consent.privacy": {
+      "type": "checkbox",
+      "aliases": [
+        "我已阅读并同意",
+        "隐私协议",
+        "隐私政策",
+        "用户协议",
+        "同意并接受",
+        "i agree",
+        "terms"
+      ]
+    },
+    "consent.sync_online_resume": {
+      "type": "checkbox",
+      "aliases": [
+        "同步更新在线简历",
+        "同步简历"
+      ]
+    },
+    "personal.highest_degree": {
+      "type": "choice",
+      "aliases": [
+        "最高学历",
+        "最高学位",
+        "highest degree",
+        "highest education"
+      ]
+    },
+    "personal.phone_country_code": {
+      "type": "choice",
+      "aliases": [
+        "区号",
+        "国家/地区",
+        "国家代码",
+        "country code",
+        "area code"
+      ]
+    }
+  }
+}

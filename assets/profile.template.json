@@ -1,0 +1,58 @@
+{
+  "_comment": "用户画像模板：复制成 data/profile.json 后填写。跨站点复用，每投一家只改 job.*。站点特有的问答不要写这里，用 scripts/90_memory.py add-qa 记进 dictionary.json。",
+
+  "meta": {
+    "candidate": "<姓名>",
+    "updated_at": "YYYY-MM-DD",
+    "sources": ["<简历文件绝对路径>"],
+    "resume_files": ["<简历文件绝对路径>"],
+    "verification": { "program_check": "pending", "human_check": "pending" }
+  },
+
+  "personal": {
+    "name": "",
+    "name_en": "",
+    "phone_country_code": "+86",
+    "phone": "",
+    "email": "",
+    "gender": "",
+    "birth_date": "YYYY-MM-DD",
+    "birth_ym": "YYYY-MM",
+    "id_number": null,
+    "location": "",
+    "address": null,
+    "political_status": null,
+    "marital_status": null,
+    "height": null,
+    "wechat": null,
+    "qq": null,
+    "highest_degree": ""
+  },
+
+  "job": {
+    "intended_city": "",
+    "intended_role": "",
+    "expected_salary": null,
+    "available_from": null,
+    "referral_code": "",
+    "source_channel": ""
+  },
+
+  "education": [
+    { "school": "", "major": "", "degree": "", "start": "YYYY-MM", "end": "YYYY-MM", "gpa": null, "rank": null }
+  ],
+
+  "experience": [
+    { "company": "", "title": "", "start": "YYYY-MM", "end": "YYYY-MM|至今", "duty": "", "leave_reason": null }
+  ],
+
+  "projects": [
+    { "name": "", "desc": "" }
+  ],
+
+  "skills": [],
+
+  "_gaps": [
+    "列出仍需用户补充/判断的字段；补完即删"
+  ]
+}

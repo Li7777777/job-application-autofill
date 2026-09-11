@@ -1,0 +1,14 @@
+# 个人数据一律不进仓库（默认写在本目录的 data/，即运行环境）
+data/
+*.local.json
+profile.json
+memory/
+runs/
+runs.jsonl
+.env
+
+# 运行产物
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
