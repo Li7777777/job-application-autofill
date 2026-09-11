@@ -135,6 +135,7 @@ python $SKILL/scripts/90_memory.py lookup --host <host>
 | 静态草稿 | 有的站不存草稿、有的异步存 | 每步落盘；重进页面后重跑扫描+填充（幂等） |
 | 自定义组件取不到值 | `input.value` 是空 | 值在显示层：读 `[class*="display-value"]` / 最近的 label 文本 |
 | 必填判定 | 星号在字段块里，不在控件上 | 扫描器已做「字段块 + 星号/必填字样」判定，标注 `requiredConfidence`；medium/low 一律列进 todo 让人工确认 |
+| 非 UTF-8 控制台（中文 Windows） | 打印 `❓`/emoji 时 `UnicodeEncodeError: 'gbk' codec` | `scripts/jaa_lib.py` 导入时已把本进程 stdout/stderr 重配为 UTF-8，本 skill 脚本无需处理；自写 python 片段请用 `PYTHONUTF8=1 python ...` |
 
 ## 6. 交付物
 

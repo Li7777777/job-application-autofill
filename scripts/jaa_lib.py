@@ -6,6 +6,15 @@
 """
 import json, os, re, shutil, sys
 
+# Windows / 非 UTF-8 控制台兼容：中文 Windows 默认 GBK，脚本打印 ❓/emoji 会
+# UnicodeEncodeError 中断。这里把本进程 stdout/stderr 重配为 UTF-8（只影响本进程，
+# 不改环境变量；Python 3.7+ 的 TextIOWrapper 支持 reconfigure）。
+for _stream in ("stdout", "stderr"):
+    try:
+        getattr(sys, _stream).reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
