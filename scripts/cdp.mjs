@@ -26,6 +26,7 @@
 //   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
 //   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
 //   node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]   # 多步真实点击（打开面板→选年→选月→选日）
+//   node cdp.mjs type <id|url片段> <表达式文件> <文本文件>      # 真实键盘逐字符输入（进 React state）
 //                                            # 表达式返回「元素数组」，逐个真实点击（div 版单选/删除按钮）
 //                                            # 给 <input type=file> 选文件（DOM.setFileInputFiles，会触发 change）
 //                                            # 表达式文件返回该 file input，例如：(() => document.querySelectorAll('input[type=file]')[0])()
@@ -79,6 +80,12 @@ const connect = url =>
     sock.onopen = () => resolve(sock);
     sock.onerror = e => reject(new Error(`websocket error: ${e?.message || e?.type || 'unknown'}`));
   });
+
+async function bringToFront(sock) {
+  // CDP 的 Input.* 事件会送给浏览器当前激活的标签页；目标页不在前台时键/鼠标会打到别的页上。
+  // 所以凡是发真实输入的命令，先把目标页激活。
+  try { await rpc(sock, 'Page.bringToFront', {}); } catch { /* 忽略：某些目标不支持 */ }
+}
 
 function rpc(sock, method, params = {}, timeoutMs = 600000) {
   const id = Math.floor(Math.random() * 1e9);
@@ -189,6 +196,7 @@ if (cmd === 'click') {
   if (!sel || !css) { console.error('usage: click <id|url片段> <CSS选择器> [waitMs]'); process.exit(1); }
   const page = await findPage(sel);
   const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
   const probe = `(() => { const el = document.querySelector(${JSON.stringify(css)});
     if (!el) return null; el.scrollIntoView({block:'center'});
     const r = el.getBoundingClientRect();
@@ -208,6 +216,7 @@ if (cmd === 'revalclick') {
   const expr = readFileSync(file, 'utf8');
   const page = await findPage(sel);
   const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
   const wrapped = `(() => { const el = (${expr});
     if (!el) return null; el.scrollIntoView({block:'center'});
     const r = el.getBoundingClientRect();
@@ -247,6 +256,7 @@ if (cmd === 'clickn') {
   const expr = readFileSync(exprFile, 'utf8');
   const page = await findPage(sel);
   const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
   const arrRes = await rpc(sock, 'Runtime.evaluate', { expression: `(${expr})`, returnByValue: false, userGesture: true });
   const arrId = arrRes.result && arrRes.result.objectId;
   if (!arrId) { console.log(JSON.stringify({ ok: false, why: 'expression did not return an array' })); process.exit(0); }
@@ -278,6 +288,7 @@ if (cmd === 'seq') {
   const steps = JSON.parse(readFileSync(file, 'utf8'));
   const page = await findPage(sel);
   const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
   const log = [];
   for (let i = 0; i < steps.length; i++) {
     let objId = null;
@@ -301,6 +312,57 @@ if (cmd === 'seq') {
   process.exit(0);
 }
 
+if (cmd === 'type') {
+  // 真实键盘输入（安全版）：真实鼠标点击聚焦 → 校验聚焦元素 rect 与目标一致 → Ctrl+A → 逐字符输入 → 回读
+  // 用法: node cdp.mjs type <id|url片段> <表达式文件> <文本文件>
+  // 为什么这么麻烦：JS 的 el.focus() 会被 React 重渲染打断（节点被替换），
+  // 此时按键会打到「上一次聚焦的框」把内容串到别的字段（本人在 cxmt 上把 2700 字符串进了一个名称框）。
+  const [sel, exprFile, textFile] = args;
+  if (!sel || !exprFile || !textFile) { console.error('usage: type <id|url片段> <表达式文件> <文本文件>'); process.exit(1); }
+  const expr = readFileSync(exprFile, 'utf8');
+  const text = readFileSync(textFile, 'utf8');
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
+  const rectOf = async (e) => {
+    const r = await rpc(sock, 'Runtime.evaluate', { expression: `(() => { const el = (${e}); if(!el) return null; el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height}); })()`, returnByValue: true });
+    const v = r.result && r.result.value;
+    return v ? JSON.parse(v) : null;
+  };
+  const target = await rectOf(expr);
+  if (!target || !target.w) { console.log(JSON.stringify({ ok: false, why: 'target not found or zero-size' })); process.exit(0); }
+  const near = (a, b) => Math.abs(a - b) <= 3;
+  let ok = false;
+  for (let attempt = 0; attempt < 4 && !ok; attempt++) {
+    await realClick(sock, target.x, target.y, 250);
+    const act = await rpc(sock, 'Runtime.evaluate', { expression: `(() => { const a = document.activeElement; if(!a || !(a.tagName==='INPUT'||a.tagName==='TEXTAREA')) return 'not-input:' + (a?a.tagName:'null'); const r = a.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,tag:a.tagName}); })()`, returnByValue: true });
+    const av = act.result && act.result.value;
+    if (av && av.startsWith('{')) {
+      const a = JSON.parse(av);
+      ok = near(a.x, target.x) && near(a.y, target.y);
+      if (!ok) console.log(JSON.stringify({ attempt, note: 'focus landed elsewhere, retrying', active: a }));
+    } else {
+      console.log(JSON.stringify({ attempt, note: 'focus check: ' + av }));
+    }
+    if (!ok) await new Promise(res => setTimeout(res, 400));
+  }
+  if (!ok) { console.log(JSON.stringify({ ok: false, why: 'could not focus the target reliably - refusing to type (would corrupt another field)' })); process.exit(0); }
+  // 全选清空
+  await rpc(sock, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+  await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
+  await new Promise(res => setTimeout(res, 150));
+  for (const ch of text) {
+    await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyDown', text: ch, unmodifiedText: ch, key: ch });
+    await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: ch });
+    await new Promise(res => setTimeout(res, 10));
+  }
+  await new Promise(res => setTimeout(res, 500));
+  const chk = await rpc(sock, 'Runtime.evaluate', { expression: `(() => { const el = (${expr}); return el ? (el.value || '') : '__gone__'; })()`, returnByValue: true });
+  const got = (chk.result && chk.result.value) || '';
+  console.log(JSON.stringify({ ok: got === text, expectLen: text.length, gotLen: got.length }));
+  process.exit(0);
+}
+
 console.error(`usage:
   node cdp.mjs port
   node cdp.mjs list
@@ -311,6 +373,7 @@ console.error(`usage:
   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
   node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]
+  node cdp.mjs type <id|url片段> <表达式文件> <文本文件>
 
 env: CDP_PORT=<port>   BROWSEROS_CONFIG=<path to .browseros/config.json>`);
 process.exit(1);
