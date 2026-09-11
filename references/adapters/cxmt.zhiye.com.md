@@ -194,13 +194,22 @@ node scripts/cdp.mjs clickn <target> expr_radios.js 450
 | `document.execCommand('insertText')` | ✅ | ❌ 经常不进 | **被还原** |
 | **CDP `Input.dispatchKeyEvent` 逐字符** | ✅ | ✅ | **能存活**（实测重渲染 + 30s 后仍在） |
 
-### 6.3 真实键盘输入的三个前提（少一个就会害人）
+### 6.3 真实键盘输入的四个前提（少一个就会害人）
 1. **目标页必须在浏览器前台** → 先 `Page.bringToFront`（`cdp.mjs` 现已在 click/seq/type 里自动做）。
 2. **聚焦要真的落上**：JS 的 `el.focus()` 会被 React 重渲染打断（节点被换掉）→ 必须用**真实鼠标点击**聚焦，
    并**校验 `document.activeElement` 的 rect 与目标 rect 一致**（±3px）才继续；否则**直接放弃**。
    ⚠️ 本人踩过：因为没校验，按键全部打到“上一次成功聚焦的框”，
    把 **2700+ 字符串进了一个项目名称框**（比留空更糟）。
-3. **清空要用 Ctrl+A**（先发 `rawKeyDown` `a` + `modifiers:2` 再发字符），不要只依赖 JS 的 `select()`。
+3. **清空要用 Ctrl+A**：先发 `rawKeyDown` `a` + `modifiers:2` 再发 `keyUp`，不要只靠 JS 的 `select()`。
+4. **换行必须用 `keyDown` + `text:'\r'`**（实测）：
+   ```js
+   await rpc(sock,'Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',
+     text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13});
+   await rpc(sock,'Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+   ```
+   ❌ `rawKeyDown` + Enter、❌ `Shift+Enter`、❌ `char` 不带 text —— **都不插字符**，换行会静默丢掉
+   （我因此一度用「；」代替换行，很难看，已改回真换行：15 条描述共 81 个换行全部保留）。
+   ✅ `char` 带 `text:'\r'` 与 `Input.insertText '\n'` 也能插换行，但**只有整套真实键盘序列才能进 React state**。
 
 ### 6.4 推荐执行顺序（避免索引漂移）
 1. **先只填“名称”字段**（名称是唯一键），每填一个就回读校验；

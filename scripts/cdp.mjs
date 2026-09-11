@@ -352,8 +352,13 @@ if (cmd === 'type') {
   await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
   await new Promise(res => setTimeout(res, 150));
   for (const ch of text) {
-    await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyDown', text: ch, unmodifiedText: ch, key: ch });
-    await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: ch });
+    if (ch === '\n') {   // 换行：必须用 keyDown + text:'\r'（rawKeyDown 不插入字符，实测无效）
+      await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+      await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    } else {
+      await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyDown', text: ch, unmodifiedText: ch, key: ch });
+      await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: ch });
+    }
     await new Promise(res => setTimeout(res, 10));
   }
   await new Promise(res => setTimeout(res, 500));
