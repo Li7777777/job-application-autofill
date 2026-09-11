@@ -9,7 +9,9 @@
   3. 40_build_mapping：从脱敏样例 scan 编译出 mapping + 待问用户清单（未映射不猜）
   4. 用户回答 → 问答记忆 → 重新编译即可自动命中
   5. 30_verify：格式/一致性/完整性 判定正确
-  6. **泄漏守卫**：仓库内含任何个人数据 / 记忆内容 / 本机绝对路径 → 直接失败
+  6. SKILL.md frontmatter 校验（缺 name/description 会让 agent 直接不加载）
+  7. **泄漏守卫**：仓库内含任何个人数据 / 记忆内容 / 本机绝对路径 → 直接失败
+  8. 非 UTF-8 控制台兼容（中文 Windows 下打印 ❓ 不应崩溃）
 """
 import json, os, re, shutil, subprocess, sys, tempfile
 import fnmatch
@@ -216,6 +218,19 @@ def main():
             bad.append(f"脚本内硬编码绝对路径: {rel}")
 
     check("可提交内容里无个人数据/记忆/本机路径", not bad, "; ".join(sorted(set(bad))[:6]))
+
+    print("8) 非 UTF-8 控制台兼容（中文 Windows 回归）")
+    probe = (
+        "import sys; sys.path.insert(0, r'%s'); "
+        "import jaa_lib; "
+        "print('\u2753', sys.stdout.encoding)" % SCRIPTS
+    )
+    _p = subprocess.run([sys.executable, "-c", probe], capture_output=True,
+                        env=dict(os.environ, PYTHONIOENCODING="gbk"), cwd=REPO)
+    _out = (_p.stdout or b"").decode("utf-8", "replace")
+    _err = (_p.stderr or b"").decode("utf-8", "replace")
+    check("PYTHONIOENCODING=gbk 下打印 ❓ 不崩溃", _p.returncode == 0, _err[-200:])
+    check("stdout 已被重配为 UTF-8", "utf-8" in _out.lower(), _out.strip())
 
     shutil.rmtree(tmp, ignore_errors=True)
     print()
