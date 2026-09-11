@@ -106,7 +106,31 @@ def main():
     check("缺失必填附件被判为缺口", "附件" in out or "缺口" in out)
     check("退出码 1 = 存在冲突", rc == 1, f"rc={rc}")
 
-    print("6) 泄漏守卫（会被提交的内容里不得有个人数据 / 记忆内容 / 本机路径）")
+    print("6) SKILL.md frontmatter 校验（缺 name/description 会让 agent 直接不加载）")
+    import re as _re
+    skill_md = open(os.path.join(REPO, "SKILL.md"), encoding="utf-8").read()
+    m = _re.match(r"^---" + chr(10) + r"(.*?)" + chr(10) + r"---" + chr(10), skill_md, _re.S)
+    check("SKILL.md 以 --- frontmatter 开头", bool(m))
+    fm = m.group(1) if m else ""
+    keys, bad_lines = {}, []
+    for line in fm.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith((" ", "	")):        # 续行 / 子字段
+            continue
+        if _re.match(r"^[A-Za-z_][A-Za-z0-9_-]*:", line):
+            k, v = line.split(":", 1)
+            keys[k] = v.strip()
+        else:
+            bad_lines.append(line[:60])          # 顶层出现裸文本 = YAML 必坏
+    check("frontmatter 顶层无裸文本行（键名没被吞）", not bad_lines, f"裸文本: {bad_lines[:2]}")
+    check("有非空 name", bool(keys.get("name")))
+    check("name 合法（a-z0-9-，≤64）",
+          bool(_re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", keys.get("name") or "")) and len(keys.get("name") or "") <= 64)
+    check("有非空 description", bool(keys.get("description")))
+    check("description ≤1024 字符", len(keys.get("description") or "") <= 1024)
+
+    print("7) 泄漏守卫（会被提交的内容里不得有个人数据 / 记忆内容 / 本机路径）")
     bad = []
 
     def git_ignored(rels):
