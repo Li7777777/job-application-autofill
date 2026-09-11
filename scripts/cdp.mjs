@@ -25,6 +25,7 @@
 //                                            # （适合「面板里的日期格子」这类每次渲染都换节点的目标）
 //   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
 //   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
+//   node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]   # 多步真实点击（打开面板→选年→选月→选日）
 //                                            # 表达式返回「元素数组」，逐个真实点击（div 版单选/删除按钮）
 //                                            # 给 <input type=file> 选文件（DOM.setFileInputFiles，会触发 change）
 //                                            # 表达式文件返回该 file input，例如：(() => document.querySelectorAll('input[type=file]')[0])()
@@ -267,6 +268,39 @@ if (cmd === 'clickn') {
   process.exit(0);
 }
 
+if (cmd === 'seq') {
+  // 多步真实点击：文件是 JSON 数组，每项是一个「返回元素的 JS 表达式」字符串。
+  // 逐项：求值 → scrollIntoView → 重新取坐标 → 发真实鼠标点击 → 等待。
+  // 适合「打开面板 → 选年 → 选月 → 选日」这类每步目标元素都不同的流程。
+  // 用法: node cdp.mjs seq <id|url片段> <表达式数组.json> [每步等待ms]
+  const [sel, file, waitMs] = args;
+  if (!sel || !file) { console.error('usage: seq <id|url片段> <表达式数组.json> [waitMs]'); process.exit(1); }
+  const steps = JSON.parse(readFileSync(file, 'utf8'));
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  const log = [];
+  for (let i = 0; i < steps.length; i++) {
+    let objId = null;
+    try {
+      const r = await rpc(sock, 'Runtime.evaluate', { expression: steps[i], returnByValue: false, userGesture: true });
+      objId = r.result && r.result.objectId;
+    } catch (e) { log.push(i + ':eval-err ' + (e && e.message)); continue; }
+    if (!objId) { log.push(i + ':no-element'); await new Promise(r => setTimeout(r, 200)); continue; }
+    const rr = await rpc(sock, 'Runtime.callFunctionOn', {
+      objectId: objId,
+      functionDeclaration: `function(){ this.scrollIntoView({block:'center'}); const r=this.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height,t:(this.innerText||'').replace(/\s+/g,' ').trim().slice(0,14)}); }`,
+      returnByValue: true,
+    });
+    if (!rr.result || !rr.result.value) { log.push(i + ':no-rect'); continue; }
+    const bx = JSON.parse(rr.result.value);
+    if (!bx.w || !bx.h) { log.push(i + ':zero-size'); continue; }
+    await realClick(sock, bx.x, bx.y, Number(waitMs || 500));
+    log.push(i + ':' + bx.t);
+  }
+  console.log(JSON.stringify({ ok: true, steps: steps.length, log }));
+  process.exit(0);
+}
+
 console.error(`usage:
   node cdp.mjs port
   node cdp.mjs list
@@ -276,6 +310,7 @@ console.error(`usage:
   node cdp.mjs revalclick <id|url片段> <表达式文件> [waitMs]
   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
+  node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]
 
 env: CDP_PORT=<port>   BROWSEROS_CONFIG=<path to .browseros/config.json>`);
 process.exit(1);
