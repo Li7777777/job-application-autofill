@@ -161,17 +161,24 @@ node scripts/cdp.mjs clickn <target> expr_radios.js 450
    要每写一个字段都从「项目名称」重新定位条目（否则会出现“只填了第一个、其余全空”）。
 10. **幽灵写入（本次真实丟数据的原因）** ⚠️：在动态新增条目里写值时，如果目标节点即将被 React 重渲染替换，
    字会写进一个即将被丢弃的节点 —— 当时 `value` 读得到，但**下一次重渲染（比如再去操作日期/下拉）就被还原掉**。
-   本次 15 个项目名称/描述就这样丢过一次（页面并未重载，`navType=navigate`、已加载 53 分钟）。
-   必须做到三件：
+   本次 15 个项目名称/描述就这样丢过两次（页面并未重载，`navType=navigate`）。
+   **实测稳定、可直接照抄的写法**（写 + 校验 + 重试 + 延迟复验）：
    ```js
+   const write = async (el, v) => {
+     el.scrollIntoView({block:'center'}); await sleep(150); el.focus(); await sleep(120);
+     el.tagName === 'INPUT' ? el.select() : el.setSelectionRange(0, (el.value||'').length);
+     document.execCommand('insertText', false, v);
+     el.dispatchEvent(new Event('change', {bubbles:true}));
+     await sleep(300); el.blur(); await sleep(300);
+   };
    for (let k = 0; k < 3; k++) {
-     await typeInto(fieldBox(i, '项目名称')..., value);   // 每个字段都重新定位，不要用缓存节点
-     if (readBack(i, '项目名称') === value) break;        // ① 写完立即回读校验 + 重试
+     if (readBack(i, '项目名称') === want) break;     // ① 每个字段都重新定位、写完立即回读
+     await write(elOf(i, '项目名称'), want); await sleep(400);
    }
-   // ② 全部写完后，人为触发一次重渲染（打开/关闭一个下拉或点其他地方），再回读一次
-   // ③ 仍不放心时：location.reload() 后再回读（这一步在 Honor 的表单上抓到过 13/15 条错位）
+   // ② 全部写完后等 30~60s 再整体复验一遍（丢值都是延迟后才显形的）
+   // ③ 不放心时 location.reload() 再验一次
    ```
-   实测：加上回读重试 + 重渲染再校验后，15 条项目名称/描述全部稳定。
+   实测：加上「回读重试 + 延迟复验」后，15 条项目名称/职务/描述 + 6 条获奖日期全部稳定（含之前反复掉的 4 条）。
 
 ## 6. 检查清单
 
