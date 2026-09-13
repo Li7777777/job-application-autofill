@@ -1,14 +1,19 @@
 {
-  "_comment": "用户画像模板：复制成 data/profile.json 后填写。跨站点复用，每投一家只改 job.*。站点特有的问答不要写这里，用 scripts/90_memory.py add-qa 记进 dictionary.json。",
-
+  "_comment": "用户画像模板：复制成 data/profile.json 后填写。跨站点复用，每投一家只改 job.*。日期一律填**最细的**那一个（如出生日期填 1999-09-15）；年月/年份粒度的页面会自动截断，不需要另填 birth_ym。站点特有的问答不要写这里，用 scripts/90_memory.py add-qa 记进 dictionary.json。",
   "meta": {
     "candidate": "<姓名>",
     "updated_at": "YYYY-MM-DD",
-    "sources": ["<简历文件绝对路径>"],
-    "resume_files": ["<简历文件绝对路径>"],
-    "verification": { "program_check": "pending", "human_check": "pending" }
+    "sources": [
+      "<简历文件绝对路径>"
+    ],
+    "resume_files": [
+      "<简历文件绝对路径>"
+    ],
+    "verification": {
+      "program_check": "pending",
+      "human_check": "pending"
+    }
   },
-
   "personal": {
     "name": "",
     "name_en": "",
@@ -17,7 +22,7 @@
     "email": "",
     "gender": "",
     "birth_date": "YYYY-MM-DD",
-    "birth_ym": "YYYY-MM",
+    "birth_ym": "",
     "id_number": null,
     "location": "",
     "address": null,
@@ -28,7 +33,6 @@
     "qq": null,
     "highest_degree": ""
   },
-
   "job": {
     "intended_city": "",
     "intended_role": "",
@@ -37,22 +41,36 @@
     "referral_code": "",
     "source_channel": ""
   },
-
   "education": [
-    { "school": "", "major": "", "degree": "", "start": "YYYY-MM", "end": "YYYY-MM", "gpa": null, "rank": null }
+    {
+      "school": "",
+      "major": "",
+      "degree": "",
+      "start": "YYYY-MM",
+      "end": "YYYY-MM",
+      "gpa": null,
+      "rank": null
+    }
   ],
-
   "experience": [
-    { "company": "", "title": "", "start": "YYYY-MM", "end": "YYYY-MM|至今", "duty": "", "leave_reason": null }
+    {
+      "company": "",
+      "title": "",
+      "start": "YYYY-MM",
+      "end": "YYYY-MM",
+      "duty": "",
+      "leave_reason": null
+    }
   ],
-
   "projects": [
-    { "name": "", "desc": "" }
+    {
+      "name": "",
+      "desc": ""
+    }
   ],
-
   "skills": [],
-
   "_gaps": [
     "列出仍需用户补充/判断的字段；补完即删"
-  ]
+  ],
+  "_date_note": "日期字段只需填最细的一份：personal.birth_date / education[].start,end / experience[].start,end。页面只要年月或只有年份时，填充器按组件粒度自适应截断并如实上报；反过来页面要年月日而画像只有年月时，会进 todo 让你补。"
 }

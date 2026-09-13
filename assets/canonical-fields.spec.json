@@ -2,7 +2,7 @@
   "_type": "field-spec",
   "_readme": "通用字段规范（SPEC，非记忆）：canonical key ↔ 常见写法。仓库里只放这份规范；任何用户/站点学习到的内容（别名、问答、站点记忆、运行日志）都写在仓库之外的数据目录里（默认 ~/.job-application-autofill，见 jaa_lib.DATA_DIR）。",
   "version": 1,
-  "updated_at": "2026-09-11",
+  "updated_at": "2026-09-14",
   "fields": {
     "personal.name": {
       "type": "text",
@@ -67,7 +67,6 @@
       "type": "date",
       "aliases": [
         "出生日期",
-        "出生年月",
         "生日",
         "出生年月日",
         "birth",
@@ -75,7 +74,8 @@
         "date of birth",
         "dob"
       ],
-      "format": "date"
+      "format": "date",
+      "granularity": "day"
     },
     "personal.id_number": {
       "type": "text",
@@ -188,7 +188,8 @@
         "可入职时间",
         "最快到岗",
         "available"
-      ]
+      ],
+      "granularity": "day"
     },
     "job.referral_code": {
       "type": "text",
@@ -245,7 +246,8 @@
         "入学时间",
         "就读时间起",
         "开始时间"
-      ]
+      ],
+      "granularity": "month"
     },
     "education.end": {
       "type": "date",
@@ -255,7 +257,8 @@
         "预计毕业时间",
         "离校时间",
         "graduation"
-      ]
+      ],
+      "granularity": "month"
     },
     "experience.company": {
       "type": "text",
@@ -346,6 +349,38 @@
         "国家代码",
         "country code",
         "area code"
+      ]
+    },
+    "personal.birth_ym": {
+      "type": "date",
+      "granularity": "month",
+      "aliases": [
+        "出生年月",
+        "出生月份",
+        "birth year month"
+      ],
+      "derive": {
+        "from": "personal.birth_date",
+        "granularity": "month"
+      },
+      "_note": "画像只填 personal.birth_date（最细）；本字段由它截断而来，不需要单独填"
+    },
+    "experience.start": {
+      "type": "date",
+      "granularity": "month",
+      "aliases": [
+        "入职时间",
+        "开始时间",
+        "起始时间"
+      ]
+    },
+    "experience.end": {
+      "type": "date",
+      "granularity": "month",
+      "aliases": [
+        "离职时间",
+        "结束时间",
+        "截止时间"
       ]
     }
   }

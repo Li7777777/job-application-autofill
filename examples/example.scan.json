@@ -5,8 +5,44 @@
   "title": "Example Campus Recruitment",
   "at": "2026-01-01T00:00:00.000Z",
   "summary": {
-    "total": 26,
-    "required": 16
+    "total": 30,
+    "required": 16,
+    "filled": 0,
+    "requiredLowConfidence": [
+      "意向工作城市",
+      "推荐码",
+      "上传简历",
+      "姓名",
+      "手机号码",
+      "手机号码",
+      "邮箱",
+      "性别",
+      "出生日期 (年龄)",
+      "招聘信息获取渠道",
+      "您使用微博的频率",
+      "是否获得国家级及以上专利？",
+      "是否在国际级或国家重点期刊发表论文",
+      "作为主创人员，是否有过商业化成功的产品或研发经验",
+      "是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）",
+      "是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）"
+    ],
+    "noLabel": [],
+    "byKind": {
+      "custom-select": 23,
+      "text": 5,
+      "file": 1,
+      "date-picker": 1
+    },
+    "byFramework": {
+      "mokahr": 30
+    },
+    "bySection": {
+      "申请信息": 5,
+      "个人信息": 10,
+      "附加信息": 5,
+      "教育背景": 10
+    },
+    "multiBlock": 10
   },
   "fields": [
     {
@@ -19,7 +55,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "意向工作城市",
+      "labelRaw": "意向工作城市",
+      "section": "申请信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -31,7 +76,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "text",
-      "value": ""
+      "value": "",
+      "labelNorm": "推荐码",
+      "labelRaw": "推荐码",
+      "section": "申请信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -43,7 +97,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "file",
-      "value": ""
+      "value": "",
+      "labelNorm": "上传简历",
+      "labelRaw": "上传简历",
+      "section": "申请信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -55,7 +118,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "text",
-      "value": ""
+      "value": "",
+      "labelNorm": "姓名",
+      "labelRaw": "姓名",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -67,7 +139,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "手机号码",
+      "labelRaw": "手机号码",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -79,7 +160,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "text",
-      "value": ""
+      "value": "",
+      "labelNorm": "手机号码",
+      "labelRaw": "手机号码",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -91,19 +181,40 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "text",
-      "value": ""
+      "value": "",
+      "labelNorm": "邮箱",
+      "labelRaw": "邮箱",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f8",
       "label": "性别",
       "type": "text",
-      "options": null,
+      "options": [
+        "男",
+        "女"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "性别",
+      "labelRaw": "性别",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
@@ -115,7 +226,16 @@
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "date-picker",
-      "value": ""
+      "value": "",
+      "labelNorm": "出生日期",
+      "labelRaw": "出生日期 (年龄)",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -127,7 +247,16 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "20276",
+      "labelRaw": "20276",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -139,19 +268,43 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "20276",
+      "labelRaw": "20276",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
       "uid": "f12",
       "label": "最高学历",
       "type": "text",
-      "options": null,
+      "options": [
+        "博士",
+        "硕士",
+        "本科",
+        "大专",
+        "其他"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "最高学历",
+      "labelRaw": "最高学历",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -163,91 +316,190 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "text",
-      "value": ""
+      "value": "",
+      "labelNorm": "所在地",
+      "labelRaw": "所在地",
+      "section": "个人信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f14",
       "label": "招聘信息获取渠道",
       "type": "text",
-      "options": null,
+      "options": [
+        "学校就业网",
+        "招聘网站",
+        "宣讲会",
+        "亲友推荐",
+        "社交媒体",
+        "其他"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "招聘信息获取渠道",
+      "labelRaw": "招聘信息获取渠道",
+      "section": "申请信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f15",
       "label": "您使用微博的频率",
       "type": "text",
-      "options": null,
+      "options": [
+        "高频：过去30天活跃≥20天",
+        "中频：过去30天活跃7-19天",
+        "低频：过去30天活跃<7天",
+        "完全不使用"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "您使用微博的频率",
+      "labelRaw": "您使用微博的频率",
+      "section": "申请信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f16",
       "label": "是否获得国家级及以上专利？",
       "type": "text",
-      "options": null,
+      "options": [
+        "是",
+        "否"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "是否获得国家级及以上专利？",
+      "labelRaw": "是否获得国家级及以上专利？",
+      "section": "附加信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f17",
       "label": "是否在国际级或国家重点期刊发表论文",
       "type": "text",
-      "options": null,
+      "options": [
+        "是",
+        "否"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "是否在国际级或国家重点期刊发表论文",
+      "labelRaw": "是否在国际级或国家重点期刊发表论文",
+      "section": "附加信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f18",
       "label": "作为主创人员，是否有过商业化成功的产品或研发经验",
       "type": "text",
-      "options": null,
+      "options": [
+        "是",
+        "否"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "作为主创人员，是否有过商业化成功的产品或研发经验",
+      "labelRaw": "作为主创人员，是否有过商业化成功的产品或研发经验",
+      "section": "附加信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f19",
       "label": "是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）",
       "type": "text",
-      "options": null,
+      "options": [
+        "是",
+        "否"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "是否获得国家级或世界级比赛三等奖及以上",
+      "labelRaw": "是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）",
+      "section": "附加信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": true,
       "uid": "f20",
       "label": "是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）",
       "type": "text",
-      "options": null,
+      "options": [
+        "是",
+        "否"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "medium",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "是否获得国家级比赛优秀名次或知名企业级比赛前三名",
+      "labelRaw": "是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）",
+      "section": "附加信息",
+      "sectionIndex": 0,
+      "block": -1,
+      "blockCount": 0,
+      "blockVia": null,
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -259,7 +511,16 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "20249",
+      "labelRaw": "20249",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -271,7 +532,16 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "20249",
+      "labelRaw": "20249",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
@@ -283,43 +553,209 @@
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "就读时间",
+      "labelRaw": "就读时间",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
       "uid": "f25",
       "label": "学校名称",
       "type": "text",
-      "options": null,
+      "options": [
+        "北京大学",
+        "清华大学",
+        "复旦大学",
+        "上海交通大学",
+        "其他"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "学校名称",
+      "labelRaw": "学校名称",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
       "uid": "f26",
       "label": "专业名称",
       "type": "text",
-      "options": null,
+      "options": [
+        "计算机科学与技术",
+        "软件工程",
+        "电子信息工程",
+        "数学与应用数学",
+        "其他"
+      ],
       "name": null,
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "专业名称",
+      "labelRaw": "专业名称",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     },
     {
       "required": false,
       "uid": "f27",
       "label": "学历",
       "type": "text",
+      "options": [
+        "博士",
+        "硕士",
+        "本科",
+        "大专"
+      ],
+      "name": null,
+      "tag": "input",
+      "requiredConfidence": "low",
+      "kind": "custom-select",
+      "value": "",
+      "labelNorm": "学历",
+      "labelRaw": "学历",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 0,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
+    },
+    {
+      "required": false,
+      "uid": "f28",
+      "label": "学校名称",
+      "type": "text",
+      "options": [
+        "北京大学",
+        "清华大学",
+        "复旦大学",
+        "上海交通大学",
+        "其他"
+      ],
+      "name": null,
+      "tag": "input",
+      "requiredConfidence": "low",
+      "kind": "custom-select",
+      "value": "",
+      "labelNorm": "学校名称",
+      "labelRaw": "学校名称",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 1,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
+    },
+    {
+      "required": false,
+      "uid": "f29",
+      "label": "专业名称",
+      "type": "text",
+      "options": [
+        "计算机科学与技术",
+        "软件工程",
+        "电子信息工程",
+        "数学与应用数学",
+        "其他"
+      ],
+      "name": null,
+      "tag": "input",
+      "requiredConfidence": "low",
+      "kind": "custom-select",
+      "value": "",
+      "labelNorm": "专业名称",
+      "labelRaw": "专业名称",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 1,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
+    },
+    {
+      "required": false,
+      "uid": "f30",
+      "label": "学历",
+      "type": "text",
+      "options": [
+        "博士",
+        "硕士",
+        "本科",
+        "大专"
+      ],
+      "name": null,
+      "tag": "input",
+      "requiredConfidence": "low",
+      "kind": "custom-select",
+      "value": "",
+      "labelNorm": "学历",
+      "labelRaw": "学历",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 1,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
+    },
+    {
+      "required": false,
+      "uid": "f31",
+      "label": "就读时间",
+      "type": "text",
       "options": null,
       "name": null,
       "tag": "input",
       "requiredConfidence": "low",
       "kind": "custom-select",
-      "value": ""
+      "value": "",
+      "labelNorm": "就读时间",
+      "labelRaw": "就读时间",
+      "section": "教育背景",
+      "sectionIndex": 0,
+      "block": 1,
+      "blockCount": 2,
+      "blockVia": "group_class",
+      "framework": "mokahr",
+      "filled": false
     }
-  ]
+  ],
+  "platform": {
+    "framework": "mokahr",
+    "score": {
+      "mokahr": 42
+    },
+    "layout": {
+      "group_class": "[class^=\"apply-block-\"] [class^=\"apply-fields\"]",
+      "level1_class": "[class^=\"apply-block-\"] [class^=\"blockTitle\"] span[class^=\"text-\"]",
+      "level2_class": "[class^=\"apply-block-\"] [class^=\"title-\"]"
+    },
+    "override": {}
+  }
 }

@@ -13,6 +13,14 @@
       --fill-result '{"ok":[{"uid":"f13","label":"性别","value":"男"}],"failed":[{"uid":"f7","label":"出生日期","detail":"...阅读器未适配"}]}' \
       --notes "mokahr sd-Select：click label 打开，点文字完全匹配的叶子节点"
 
+  # 记录一条「简历值 → 页面实际选项」的对照（下次同站直接命中，不再需要问）
+  python 90_memory.py add-option --host app.mokahr.com \
+      --label "意向工作城市" --value "北京" --option "北京市"
+
+  # 把 probeOptions 探测到的选项目录并进站点记忆（下次编译 mapping 时就能做选项闸门）
+  python 90_memory.py record-probe --host app.mokahr.com --scan data/runs/app.mokahr.com-scan.json \
+      --probe data/runs/app.mokahr.com-probe.json
+
   # 记录一条问答型“价值对”（站点特有提问）
   python 90_memory.py add-qa --question "您使用微博的频率" --answer "高频：过去30天或自然月的活跃天数≥20天"
 
@@ -78,6 +86,12 @@ def cmd_record(args):
         elif canonical and str(canonical).startswith("qa:"):
             rec["qa"] = str(canonical)[3:]
         rec["kind"] = f.get("kind") or rec.get("kind")
+        if f.get("section"):
+            rec["section"] = f.get("section")
+        if f.get("block") is not None and int(f.get("block")) >= 0:
+            rec["block"] = int(f.get("block"))
+        if f.get("framework"):
+            rec["framework"] = f.get("framework")
         if f.get("options"):
             rec["options_sample"] = f["options"][:12]
         if uid in ok_uids:
@@ -136,6 +150,48 @@ def cmd_add_alias(args):
     return 0
 
 
+def cmd_add_option(args):
+    """记录「简历值 → 页面实际选项」的对照。只写站点记忆（仓库外），下次同站自动命中。"""
+    path = site_memory_path(args.host)
+    mem = load_json(path, {}) or {}
+    mem.setdefault("fields", {}).setdefault(args.label, {}).setdefault("option_map", {})
+    mem["fields"][args.label]["option_map"][args.value] = args.option
+    mem["host"] = args.host
+    mem["updated_at"] = now()
+    save_json(path, mem)
+    print(f"选项对照已记录：{args.host} / {args.label} / {args.value!r} → {args.option!r}")
+    return 0
+
+
+def cmd_record_probe(args):
+    """把 20_fill.js 在 probeOptions 模式下产出的 probed（uid → 选项数组）并进站点记忆。"""
+    scan = load_json(args.scan, {}) or {}
+    probed = load_json(args.probe, {}) or {}
+    host = args.host or scan.get("host") or "unknown"
+    by_uid = {f["uid"]: f for f in scan.get("fields", [])}
+    path = site_memory_path(host)
+    mem = load_json(path, {}) or {}
+    mem.setdefault("fields", {})
+    n = 0
+    for uid, opts in (probed or {}).items():
+        f = by_uid.get(uid)
+        if not f or not opts:
+            continue
+        label = f.get("label") or uid
+        rec = mem["fields"].setdefault(label, {})
+        rec["options_sample"] = list(opts)[:40]
+        rec["kind"] = f.get("kind") or rec.get("kind")
+        rec["section"] = f.get("section") or rec.get("section")
+        rec["last_seen"] = now()[:10]
+        n += 1
+    mem["host"] = host
+    mem["last_url"] = scan.get("url")
+    mem["updated_at"] = now()
+    save_json(path, mem)
+    print(f"选项目录已并入站点记忆：{n} 个字段 → {path}")
+    return 0
+
+
 def cmd_suggest(args):
     """给一批字段名，看字典能匹配到什么（用于人工确认映射）"""
     d = load_json(DICT_PATH, {})
@@ -154,6 +210,8 @@ def main():
     p.add_argument("--fill-result"); p.add_argument("--notes"); p.set_defaults(fn=cmd_record)
     p = sub.add_parser("add-qa"); p.add_argument("--question", required=True); p.add_argument("--answer", required=True); p.set_defaults(fn=cmd_add_qa)
     p = sub.add_parser("add-alias"); p.add_argument("--canonical", required=True); p.add_argument("--alias", required=True); p.set_defaults(fn=cmd_add_alias)
+    p = sub.add_parser("add-option"); p.add_argument("--host", required=True); p.add_argument("--label", required=True); p.add_argument("--value", required=True); p.add_argument("--option", required=True); p.set_defaults(fn=cmd_add_option)
+    p = sub.add_parser("record-probe"); p.add_argument("--host"); p.add_argument("--scan", required=True); p.add_argument("--probe", required=True); p.set_defaults(fn=cmd_record_probe)
     p = sub.add_parser("suggest"); p.add_argument("labels", nargs="+"); p.set_defaults(fn=cmd_suggest)
     ensure_data_dir()
     a = ap.parse_args()
