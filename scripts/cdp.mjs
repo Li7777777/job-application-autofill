@@ -15,6 +15,7 @@
 //   node cdp.mjs port                       # 从 config.json 读 CDP 端口（也可用 --port 覆盖）
 //   node cdp.mjs list                       # 列出所有页面（id / title / url）
 //   node cdp.mjs open <url>                 # 新开一个页，打印 targetId
+//   node cdp.mjs close <id|url片段>          # 关掉自己开的页（跑完不留垃圾页）
 //   node cdp.mjs eval <id|url片段> <脚本文件> [timeoutMs]
 //                                            # 在页里跑脚本，返回最后一个表达式的值
 //                                            # 脚本按「函数体」执行 → 必须顶层 return
@@ -37,7 +38,7 @@
 //   node cdp.mjs eval 127.0.0.1:8787/... fill.js 900000
 // 脚本里用 document.querySelector 正常操作即可；要「真实点击」时改用 click/revalclick。
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -159,6 +160,84 @@ if (cmd === 'open') {
     out = { id: (await rpc(sock, 'Target.createTarget', { url })).targetId };
   }
   console.log(out.id);
+  process.exit(0);
+}
+
+if (cmd === 'close') {
+  // 关掉自己开的页（解决“标签页越开越多且关不掉”：结束后不留垃圾页）
+  const sel = args[0];
+  if (!sel) { console.error('usage: close <id|url片段>'); process.exit(1); }
+  const hit = await findPage(sel);
+  const version = await httpJson('/json/version');
+  const sock = await connect(version.webSocketDebuggerUrl);
+  await rpc(sock, 'Target.closeTarget', { targetId: hit.id });
+  console.log(`closed ${hit.id}`);
+    // ⚠️ 关目标后立刻 process.exit 会在 Windows 上撞 libuv 断言
+  //（Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src/win/async.c）→
+  // 退出码非 0，会把 `cdp.mjs close && ...` 这类脚本链打断。先干净收尾再退。
+  try { if (typeof sock.close === 'function') sock.close(); } catch (e) {}
+  await new Promise(r => setTimeout(r, 250));
+process.exit(0);
+}
+
+if (cmd === 'wake') {
+  // 让被遮挡/后台的标签页「活过来」：bringToFront + 强制 active 生命周期 + 焦点模拟。
+  // 为什么需要：Chrome 对不可见标签页会**挂起 requestAnimationFrame** 并节流 setTimeout
+  //（intensive throttling ≈ 1 个定时器/分钟）→ ① antd/Element 的下拉、日历面板根本不渲染；
+  // ② 页内 `await sleep()` 变成分钟级（20_fill.js 会「rpc 超时但页内还在跑」）。
+  // 实测：只 bringToFront 不够（窗口被遮挡/最小化时 document.visibilityState 仍是 hidden）。
+  const sel = args[0];
+  if (!sel) { console.error('usage: wake <id|url片段>'); process.exit(1); }
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  const out = {};
+  for (const [name, method, params] of [
+    ['front', 'Page.bringToFront', {}],
+    ['lifecycle', 'Page.setWebLifecycleState', { state: 'active' }],
+    ['focus', 'Emulation.setFocusEmulationEnabled', { enabled: true }],
+  ]) {
+    try { await rpc(sock, method, params); out[name] = 'ok'; } catch (e) { out[name] = String((e && e.message) || e); }
+  }
+  try {
+    const v = await rpc(sock, 'Runtime.evaluate', {
+      expression: 'JSON.stringify({visibility:document.visibilityState,hidden:document.hidden,hasFocus:document.hasFocus()})',
+      returnByValue: true,
+    });
+    out.state = JSON.parse((v && v.result && v.result.value) || '{}');
+  } catch (e) { out.state = String((e && e.message) || e); }
+  console.log(JSON.stringify(Object.assign({ ok: true, target: page.id }, out)));
+  process.exit(0);
+}
+
+if (cmd === 'front') {
+  // 把目标页提到前台（Page.bringToFront）。
+  // 为什么需要：**后台标签页里 rAF/定时器被节流**，很多组件库的下拉/日历面板根本不会渲染 →
+  // 不报错、但「点开后读不到任何选项」。长批量填表前先 front 一下最稳。
+  const sel = args[0];
+  if (!sel) { console.error('usage: front <id|url片段>'); process.exit(1); }
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
+  console.log(JSON.stringify({ ok: true, fronted: page.id, title: (page.title || '').slice(0, 40) }));
+  process.exit(0);
+}
+
+if (cmd === 'shot') {
+  // 截图存档：`node cdp.mjs shot <id|url片段> <输出png> [fullPage]`
+  // 为什么需要：驱动真浏览器做几小时填表，却没有任何"看一眼页面"的手段 ——
+  // 脚本回读与人的观察不一致时（例如"你说没填，我说填了"），截图是唯一能对齐的事实来源。
+  const [sel, outPath, full] = args;
+  if (!sel || !outPath) { console.error('usage: shot <id|url片段> <输出png> [fullPage]'); process.exit(1); }
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
+  const params = { format: 'png' };
+  if (full === 'fullPage') params.captureBeyondViewport = true;
+  const res = await rpc(sock, 'Page.captureScreenshot', params, 60000);
+  const data = res && res.data;
+  if (!data) { console.log(JSON.stringify({ ok: false, why: 'no screenshot data' })); process.exit(0); }
+  writeFileSync(outPath, Buffer.from(data, 'base64'));
+  console.log(JSON.stringify({ ok: true, out: outPath, bytes: Buffer.from(data, 'base64').length }));
   process.exit(0);
 }
 
@@ -372,12 +451,14 @@ console.error(`usage:
   node cdp.mjs port
   node cdp.mjs list
   node cdp.mjs open <url>
+  node cdp.mjs close <id|url片段>
   node cdp.mjs eval <id|url片段> <脚本文件> [timeoutMs]
   node cdp.mjs click <id|url片段> <CSS选择器> [waitMs]
   node cdp.mjs revalclick <id|url片段> <表达式文件> [waitMs]
   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
   node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]
+  node cdp.mjs wake <id|url片段>          # front + setWebLifecycleState(active) + 焦点模拟；后台标签页面板不渲染 / 定时器被节流时先跑它
   node cdp.mjs type <id|url片段> <表达式文件> <文本文件>
 
 env: CDP_PORT=<port>   BROWSEROS_CONFIG=<path to .browseros/config.json>`);
