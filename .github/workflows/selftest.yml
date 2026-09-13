@@ -16,5 +16,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Parse the page scripts as evaluate function bodies
+        run: node dev/check_js.js scripts/10_scan_form.js scripts/20_fill.js scripts/15_dump_state.js
       - name: Run self-test (no browser needed)
         run: python tests/selftest.py
+
+  # 真机端到端（需要浏览器 + CDP）不会在 CI 里跑；本地手动：
+  #   python tests/browser_e2e.py
+  # 无浏览器时它会自动 SKIP（退出码 0）。
