@@ -1,8 +1,16 @@
 # 策略库：控件配方 / 启发式 / 工具技巧
 
-> 全部结论来自两次真机实测：`app.mokahr.com`（自定义组件重型）与 `www.selenium.dev/.../web-form.html`（原生控件全类型）。
+> 全部结论来自两次真机实测：`app.mokahr.com`（自定义组件重型）与 `www.selenium.dev/.../web-form.html`（原生控件全类型），
+> 并在 2026-09 对照 Chrome 扩展「牛客网申助手 1.0.8」的抽取/填写链路做了扩充。
+>
+> **7 大 ATS 框架（antd / Element / ATSX / moka / 北森 / Hotjob / 飞书）的识别、下拉、日历配方
+> 单独放在 `references/component-recipes.md`**；本节只讲通用启发式与工具技巧。
 
 ## 1. 控件配方（怎么点、怎么写）
+
+> 已全部固化进 `scripts/20_fill.js`（`setNative` / `simulateType` / `setContentEditable` /
+> `clickReal` / `fillCustomSelect` / `calendarPick`）。下面这些片段是「读代码前的速览」，
+> 改脚本时以脚本为准；框架相关的选择器见 `component-recipes.md`。
 
 ```js
 // ① 普通文本 / textarea / 数字 / color / range —— 用原生 setter，React/Vue 才认
@@ -27,27 +35,41 @@ const radioText = e => CLEAN(
   e.parentElement?.innerText || e.value);
 target.click();   // 点 input 或它的 label 都行
 
-// ④ 自定义下拉（antd / mokahr sd-Select / role=combobox）
-el.click(); await sleep(450);                       // 打开
-const opt = findOption(want);                       // 见下方查找规则
-opt.scrollIntoView({block:'center'}); opt.click();  // 选中
-// 校验策略：读 *显示值*（display-value 或最近 label 文本），不要读 input.value（常为空）
+// ④ 自定义下拉（antd / Element / mokahr sd-Select / 飞书 ud__select / 北森 phoenix…）
+//    真实鼠标序列开面板（React 代理事件不认 el.click()）
+for (const t of ['pointerdown','mousedown','mouseup','click']) el.dispatchEvent(new MouseEvent(t, {bubbles:true, clientX, clientY}));
+await sleep(260);
+// 面板 = 「离触发元素最近的可见弹层」；选项只取叶子/单子包裹层
+const opt = rankOptions(want, collectOptions(panel, cfg.option_selector))[0];
+// 只有 score >= 0.98（原文相等 / 归一化后相等）才点；包含与缩写匹配只进 suggestions
+opt.el.scrollIntoView({block:'center'}); clickReal(opt.el);
+// 校验：读 *显示值*（display_value_selector），不要读 input.value（自定义组件常为空）
+// 读值铁律：display_value_selector → select.selectedOptions → el.value；
+// 只有自定义组件才去猜外层容器文字（否则裸 input 会把字段标签当成值）
 
 // ⑤ 只读日期框（input readonly + 日历图标）—— 只 click() 不会弹！必须补鼠标序列
 inp.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
 inp.dispatchEvent(new MouseEvent('mouseup',   {bubbles:true}));
 inp.click();
-// 面板里：◀◀/▶▶ 每次 ±1 年；月份是叶子节点（'一月'…'十二月' 或 '1'..'12'）
-// 选完月若出现「日」面板再选日；有些网站该控件只有“年月”粒度 → 如实告知用户
+// 面板里：◀◀/▶▶ 每次 ±N 年；月名可能是 '一月'…'十二月' 或 '1月' 或 'Jan'
+// ⚠️ 日期预置不能只看字段的框架标签：混合框架页面上会选错预置。
+//    20_fill.js 的做法：打开面板后，看「哪套预置的选择器真的出现在这个面板上」来选（presetScore）。
+// ⚠️ 时间粒度自适应：画像只存最细的（1999-09-15），组件要多粗填多粗（1999-09 / 1999）。
+//    calendarPick 支持 stopAt 并返回实际走到的粒度；**绝不拿 01 去凑日号**（要更细就问用户）。
+// ⚠️ 找不到目标日不要退化成「最近的可用日」，直接失败并问用户（calendarPick 已如此）
 
 // ⑥ 复选框：值语义映射（是/否、true/false、1/0）→ 需要勾就 click，需要去掉也 click
 ```
 
-**弹层选项查找规则**（`findOption`）：遍历可见的 `[role=option] / li / [class*=option|item|cell] / div / span`，
-只取「无子元素或只有一个同文子元素」的叶子/包裹层，文本 1–40 字符，且**不是提交类元素**；
-先精确匹配，再（可选）包含匹配；同一时刻通常只有一个是可见弹层，取最后一个可见的即可。
+**弹层选项查找规则**（`collectOptions` + `rankOptions`）：容器取 `option_container_selector` 里**可见、非黑名单、
+离触发元素最近**的那个；选项只收「无子元素或只有一个同文子元素」的叶子/包裹层，文本 1–80 字符；
+打分：原文相等 1.0 / 归一化相等 0.98 / 包含 0.5–0.8 / 中文缩写按序包含 0.45。
+**只有 ≥0.98 才会点击**，其余进 `suggestions` 交给用户。
 
 ## 2. 字段名与必填的启发式（扫描器怎么想）
+
+> 扫描器现在产出两组名字：`label`（显示用，给人看）与 **`labelNorm`（去噪声，给匹配用）**。
+> 字典匹配、站点记忆、问答记忆一律走 `labelNorm`；`label` 只用于报告。
 
 字段名候选顺序（可信度从高到低）：
 1. `field-title`：从控件包裹层之外向上找，取该层第一个「不含控件、文字 ≤40」的子元素
@@ -55,15 +77,26 @@ inp.click();
 2. `aria-label` / `aria-labelledby` / `label[for]`
 3. `wrapping-label`：包裹控件的 `<label>` 文本 —— **注意**：自定义组件里它常常就是“当前选中值”（如「北京市」），
    所以要先排除「与控件自身值/placeholder 相同」的候选
-4. 各层祖先的第一行文字（由外向内，同样排除自身值）
-5. `placeholder` / `title` / `name` / `id`（机器名兜底）
+4. 框架 `level2_class` 命中的标签（最准；命中就跳过 5）
+5. 各层祖先的第一行文字（由外向内，同样排除自身值）
+6. `placeholder` / `title` / `name` / `id`（机器名兜底）
 显示用字段名 = 候选里第一个长度 ≤24 的；否则用第一个候选。
 
+**标签归一化**（`labelNorm`，与 `jaa_lib.norm_label` 必须一致）：
+去 `（必填）(必填)（可选）(可选)（选填）(选填)必填选填可选添加编辑` → 去**整段括号内容** →
+去行首编号与 `+` → 去空白/标点/大小写。
+实测：`毕业时间（必填）` 之前匹配不上，现在能直接命中 `education.end`。
+
+**区块与重复块**：扫描器还产出 `section`（区块标题）与 `block`（重复块序号）。
+多段经历靠 `(section, block)` 定记录序号 —— 见 `component-recipes.md` §6。
+
 必填判定：
-- `required` 属性 / `aria-required=true` → high
+- `required` / `aria-required=true` / `data-required=true` → high
 - 控件 class 含 `required-*` → high
-- 向上 6 层内，任一祖先满足「文字 <150 且里面控件数 ≤4（字段级，不是区块级）且不含『选填/非必填』」，
-  且该祖先含 `*`/「必填」字样或存在 `[class*=required]` → medium（**必须让用户确认**）
+- **框架信号**：`.ant-form-item-required`（antd）、`.el-form-item.is-required`（Element）→ high
+- 向上 7 层内，任一祖先满足「文字 <150 且里面控件数 ≤4（字段级，不是区块级）且不含『选填/非必填』」，
+  且该祖先含 `*`/「必填」字样或存在 `[class*=required|asterisk]` 或 `[data-required]` → medium
+  （**必须让用户确认**）
 
 > 实测：mokahr 的下拉比文本框多一层 `Dropdown-container`，所以层数要给够；
 > 而「申请信息」这种同区块里另一个字段是必填时，会给同区块的选填字段带来**误判**
@@ -108,9 +141,40 @@ obj = json.loads(raw[raw.index('{"url"'):raw.rindex('}')+1])   # 按自己的 JS
   `page N is not owned by this agent` → **统一 `tabs new` 开自己的页**（同窗口共享 cookie，登录态直接复用）。
 - 会话/工具会话可能被重建，`page id` 会失效 → 失效就重新 `tabs new` + 重新扫描（脚本幂等，代价很小）。
 - 用 `name_session` 给会话取名（如 `form autofill`），便于多任务并存。
+- ⚠️ **后台标签页的定时器会被冻结**：`eval` 里含 `await sleep()` 的脚本会**永久挂起**（看起来像 CDP 超时）。
+  跑异步脚本前先 `node scripts/cdp.mjs front <id>`；详见 §8.7。
 - ⚠️ **重建是常态，不是偶发**：只要一次 `evaluate` 超过 60 秒，或前后两次调用间隔久了，
   MCP 侧就会换一个新会话，**之前开的页全部作废**（改名也认不回来，归属认的是会话 id）。
   机制、证据和绕过方法见 §8 —— 长任务请直接走 CDP，不要用 MCP 硬扛。
+
+### 8.7 后台标签页会**冻结定时器** —— 含 `await sleep()` 的脚本会永久挂起（必看）
+
+这是 2026-09-14 在赛力斯（zhiye）与 mokahr 上**独立踩到两次**的问题，会伪装成"CDP 超时"：
+
+| 现象 | 真因 |
+|---|---|
+| `Runtime.evaluate` 跑到几分钟/几十分钟才报 `rpc timeout`，脚本明明不慢 | 目标页**不在前台**时，Chrome 冻结后台页的 `setTimeout` / `requestAnimationFrame`：脚本里第一个 `await sleep(300)` 就再也不返回 |
+| 同一个脚本改成**全同步**就能跑完 | 同步代码不受冻结影响，所以"看起来像是脚本的错" |
+| 下拉/日历面板"点开后读不到任何选项"、`offsetParent` 正常却读不到 | 面板要在下一帧渲染，而后台页没有帧 |
+
+**解法（推荐用 `wake`，它比 `front` 强）**：
+0. **`node scripts/cdp.mjs wake <targetId>`** —— `bringToFront` + `Page.setWebLifecycleState('active')` + `Emulation.setFocusEmulationEnabled` 三连，
+   并回读 `document.visibilityState / hidden / hasFocus` 让你确认是否真的活了。
+   ⚠️ **只 `bringToFront` 不够**：窗口被遮挡/最小化时 `document.visibilityState` 仍然是 `hidden`（实测），
+   面板照样不渲染、定时器照样被节流。**跑异步脚本前先 `wake`，并检查它回读出来的 `visibility` 是不是 `visible`**。
+1. 退一步至少 `node scripts/cdp.mjs front <targetId>`（内部是 `Page.bringToFront`）；
+   注意 `cdp.mjs click / clickn / revalclick / seq / type` 会自动 bringToFront，**`eval` 不会** —— 批量填表前手动唤醒一次。
+2. 写脚本时把「等面板出现」改成**轮询 + 硬上限**，并且别把关键路径押在单次 `sleep` 上。
+
+> 并发跑多个站点/多个子任务时特别容易中招：A 站的脚本把标签切到前台，B 站的异步脚本就被冻住。
+> 结论：**多任务并发时，每个站点跑之前都要 `wake` 自己那页**（窗口被遮挡时 `front` 不够）。
+
+**推论（很重要，会改变你的处置动作）**：`Runtime.evaluate` 报超时**不等于**页内脚本停了 ——
+超时只是**本地等待放弃**；浏览器侧那个 async 任务常常还在继续跑，甚至最终跑完。
+实测（hotjob）：一次填充脚本"超时"报错后，**它自己把 15 个字段填完了**。
+所以看到超时的第一动作不是重跑，而是：
+1. `eval` 一个「只读回读」脚本（或 `15_dump_state.js`）看**目标字段是不是已经写好了**；
+2. 确认没写好再重跑 —— 直接重跑容易写出重复记录或把已填值翻来覆去覆盖。
 
 ## 6. 提交拦截（硬性）
 
@@ -126,8 +190,13 @@ const assertSafe = el => !(el.tagName === 'BUTTON' || (el.getAttribute('type')||
 
 - 文本：归一化（去空白/大小写/标点）后相等，或一方包含另一方；
 - 日期：抽数字成 `YYYY-MM` 再比，允许 `2027 | 6` / `2027年6月` / `2027-06-01` 互相匹配；
+  **时间粒度自适应产生的截断不算冲突**：表单 `1999-09`、画像 `1999-09-15` → 报 `OK`（截断）而非 `≠≠`；
+  只有「表单比画像更细」或两者不同年月才报冲突；
 - 是否题：`是/有/true/yes/1/on` 视为真；
-- 选项型：若画像值不在页面选项里 → 不静默写入，报「选项不匹配」让用户确认；
+- 选项型：**闸门在编译阶段**（`40_build_mapping.py`）——值不在页面选项里就**不写进 mapping**，
+  而是进 `*-todo.md` 变成 `option-choice` 阻塞项，附「建议值 + 全部选项」。
+  包含匹配（`contains`）与中文缩写匹配（`subsequence`）**只作建议**，永远不自动改值。
+  自定义下拉的选项靠 `OPTS.probeOptions=true` 先探测，或用 `--probe` 合并探测结果。
 - 必填：以扫描的 `required` 为准，但 medium/low 的可信度要在报告里标出来。
 
 ## 8. 长任务：绕开 MCP，直连浏览器原生 CDP（重要）
@@ -184,6 +253,14 @@ node scripts/cdp.mjs click <targetId> "span.del-btn"  # 真实鼠标点击
 ### 8.4 三个只有 CDP 才做得干净的动作
 
 1. **真实鼠标点击**（`click` / `revalclick`）：走 CDP `Input.dispatchMouseEvent`，浏览器视为真人点击。
+   ⚠️ **两者对表达式的返回形状要求不同**：`revalclick` 要**单个元素**，`clickn` 要**元素数组**。
+   给 `revalclick` 返回 `[el]` 会得到 `expression returned no element`（静默什么都没点）；反之同理。
+   同理：表达式返回的元素若**当前不可见**（`getBoundingClientRect()` 全 0，例如页面停在"只读摘要视图"、编辑表单在 DOM 里但被隐藏），
+   会报 `element has zero size (hidden?)` 并点到 (0,0) —— 先切回可编辑视图再动手。
+   ⚠️ **`clickn` / `revalclick` 的表达式必须返回「元素」或「元素数组」**，不能返回字符串/数字 ——
+   返回字符串时工具拿到的是 `[null]`／`did not return an element`，表现为**静默什么都没点**。
+   实测踩过：把待选值当参数塞进表达式（`() => WANT`），6 个字段一个都没点中，排查半天。
+   **要传参数就先 `window.__WANT = …` 设一次，再让表达式只返回元素。**
    页面里那些「hover 才出现」「只用 React 代理事件」的控件（删除按钮、确认弹窗）用它才稳。
 2. **直接调 React 处理器**：合成 `el.click()` 常常无效（React 16 的代理事件不认），这时可以从元素上取
    内部实例，直接调它的 `onClick`：
