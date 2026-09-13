@@ -1,0 +1,341 @@
+{
+  "_type": "platform-selectors",
+  "_readme": "主流 ATS / 组件库的控件选择器与日期面板配方（站点无关的可发布资产）。扫描器(10_scan_form.js)用它做框架识别与分区，填充器(20_fill.js)内嵌同一份数据用于开下拉/选日期。",
+  "_provenance": "逆向自 Chrome 扩展「牛客网申助手 1.0.8」内置的 platform-selectors 配置（其运行时从 static.nowcoder.com 拉取同名 JSON），并做了三类补强：①给每个框架加 detect 选择器用于本地识别；②选项容器/选项补 :not(...-hidden) 可见性过滤；③把其内置的日期面板预设（antCalendar/antPicker/elDatePicker/mokahr/feishu/fusion）与分区规则（level1/level2/group）整理成可复用预设。用前请以真机为准（IDE 里的 DOM 会变），对不上就更新 references/adapters/<host>.md。",
+  "version": 1,
+  "updated_at": "2026-09-14",
+  "frameworks": {
+    "antd": {
+      "label": "Ant Design (antd v3 / v4 / v5)",
+      "detect": [
+        ".ant-select",
+        ".ant-select-selector",
+        ".ant-picker",
+        ".ant-calendar-picker",
+        ".ant-cascader",
+        ".ant-tree-select",
+        ".ant-form-item",
+        ".ant-input"
+      ],
+      "option_container_selector": ".ant-select-dropdown:not(.ant-select-dropdown-hidden), .ant-dropdown:not(.ant-dropdown-hidden), .ant-cascader-dropdown:not(.ant-select-dropdown-hidden)",
+      "option_selector": ".ant-select-dropdown-menu-item, .ant-select-item-option, .ant-select-item, .ant-cascader-menu-item, .ant-menu-item, li[role=\"option\"]",
+      "trigger_selector": ".ant-select-selector, .ant-select, .ant-cascader-picker, .ant-picker, .ant-input",
+      "search_input_selector": ".ant-select-search__field, .ant-select-selection-search-input",
+      "display_value_selector": ".ant-select-selection-item, .ant-select-selection-selected-value, .ant-select-selection__rendered, .ant-cascader-picker-label",
+      "tree": {
+        "wrapper": ".ant-select-tree-wrapper, .ant-select-tree-list, .ant-tree",
+        "node": ".ant-select-tree-treenode, li[role=\"treeitem\"]",
+        "title": ".ant-select-tree-title, .ant-tree-node-content-wrapper",
+        "switcher": ".ant-select-tree-switcher, .ant-tree-switcher"
+      },
+      "date_preset": "antPicker",
+      "layout_preset": "antd-form"
+    },
+    "element": {
+      "label": "Element UI / Element Plus",
+      "detect": [
+        ".el-select",
+        ".el-input",
+        ".el-date-editor",
+        ".el-form-item",
+        ".el-cascader",
+        ".el-select-dropdown"
+      ],
+      "option_container_selector": ".el-select-dropdown:not(.is-hidden), .el-dropdown-menu, .el-popper:not([style*=\"display: none\"])",
+      "option_selector": ".el-select-dropdown__item, .el-dropdown-menu__item, .el-cascader-node",
+      "trigger_selector": ".el-input__inner, .el-select__wrapper, .el-input, .el-date-editor",
+      "search_input_selector": ".el-select__input, .el-input__inner",
+      "display_value_selector": ".el-select__selected-item, .el-select__placeholder, .el-input__inner",
+      "tree": {
+        "wrapper": ".el-tree, .el-cascader-panel",
+        "node": ".el-tree-node, .el-cascader-node",
+        "title": ".el-tree-node__label, .el-cascader-node__label",
+        "switcher": ".el-tree-node__expand-icon, .el-cascader-node__postfix"
+      },
+      "date_preset": "elDatePicker",
+      "layout_preset": "element-form"
+    },
+    "atsx": {
+      "label": "ATSX（Moka 系 / atsx-* 前缀）",
+      "detect": [
+        ".atsx-select",
+        ".atsx-form-item",
+        ".atsx-date-picker",
+        ".atsx-select-selection"
+      ],
+      "option_container_selector": ".atsx-select-dropdown:not(.atsx-select-dropdown-hidden)",
+      "option_selector": "li[role=\"option\"], .atsx-select-item-option",
+      "trigger_selector": ".atsx-select-selection, .atsx-select, .atsx-date-picker",
+      "search_input_selector": ".atsx-select-search input, input",
+      "display_value_selector": ".atsx-select-selection-item, .atsx-select-selection__rendered",
+      "date_preset": "fusionRangePanel",
+      "layout_preset": "atsx-form"
+    },
+    "mokahr": {
+      "label": "Moka HR（sd-* 前缀）",
+      "detect": [
+        "[class*=\"sd-Select\"]",
+        "[class*=\"sd-Input\"]",
+        "[class*=\"apply-block-\"]",
+        "[class*=\"sd-Dropdown\"]",
+        "[class*=\"sd-picker\"]"
+      ],
+      "option_container_selector": "[class*=\"sd-Dropdown-dropdown-\"]",
+      "option_selector": "[class*=\"sd-Menu-content-item\"], [class*=\"sd-Select-common-item\"]",
+      "trigger_selector": "[class*=\"sd-Select-container\"], [class*=\"sd-Select-\"], [class*=\"sd-Input-display-value\"]",
+      "search_input_selector": "[class*=\"sd-Select\"] input",
+      "display_value_selector": "[class*=\"sd-Input-display-value\"], [class*=\"sd-Select-common-item\"]",
+      "date_preset": "mokahr",
+      "layout_preset": "mokahr"
+    },
+    "beisen": {
+      "label": "北森 Beisen（phoenix-* / ux-standard-form）",
+      "detect": [
+        ".ux-standard-form",
+        "[class*=\"phoenix-selectList\"]",
+        "[class^=\"dl_menutit\"]",
+        "[id*=\"_Recruitment_\"]"
+      ],
+      "option_container_selector": "[class=\"phoenix-selectList__list\"], .list-data-container, .area-data-container",
+      "option_selector": "[class*=\"phoenix-selectList__listItem\"], .list-item-container, .area-item-name",
+      "trigger_selector": ".phoenix-selectList, .list-data-container, .area-data-container, [class^=\"form-item__text\"]",
+      "search_input_selector": "input[type=\"text\"]",
+      "display_value_selector": "[class*=\"phoenix-selectList__selected\"], .list-selected-value",
+      "date_preset": "fusionRangePanel",
+      "layout_preset": "beisen"
+    },
+    "hotjob": {
+      "label": "Hotjob / 前程无忧系（ant-* + form-cell-inner）",
+      "detect": [
+        "[class~=\"form-cell-inner\"]",
+        ".set_i_content_table",
+        ".resume_info_title"
+      ],
+      "option_container_selector": ".ant-select-dropdown:not(.ant-select-dropdown-hidden), .ant-dropdown:not(.ant-dropdown-hidden)",
+      "option_selector": ".ant-select-dropdown-menu-item, .ant-select-item-option, .ant-menu-item, li[role=\"option\"]",
+      "trigger_selector": ".ant-select-selector, .ant-select, .form-cell-inner",
+      "search_input_selector": ".ant-select-search__field, .ant-select-selection-search-input",
+      "display_value_selector": ".ant-select-selection-item, .ant-select-selection-selected-value",
+      "date_preset": "antCalendarWithYearSelect",
+      "layout_preset": "hotjob"
+    },
+    "feishu": {
+      "label": "飞书招聘（ud__* / throne-biz-*）",
+      "detect": [
+        ".ud__select",
+        ".ud__picker",
+        ".ud__form__item",
+        ".bitable-form-item",
+        ".ud__tree"
+      ],
+      "option_container_selector": ".ud__select__dropdown:not(.ud__select__dropdown-hidden)",
+      "option_selector": ".ud__select__list__item",
+      "trigger_selector": ".ud__select, .ud__picker-dateInput, .throne-biz-date-range-picker-input",
+      "search_input_selector": "input",
+      "display_value_selector": ".ud__select__selector__text, .ud__select__selection",
+      "date_input_ancestor": ".ud__picker-dateInput",
+      "date_range_ancestor": ".throne-biz-date-range-picker-input",
+      "date_preset": "feishu",
+      "tree": {
+        "wrapper": ".ud__tree, .ud__tree__list",
+        "node": ".ud__tree__node",
+        "title": ".ud__tree__node__label",
+        "switcher": ".ud__expandButton, .ud__tree__node__expandIcon"
+      },
+      "layout_preset": "feishu"
+    }
+  },
+  "date_presets": {
+    "antCalendarWithYearSelect": {
+      "yearPanelSelector": ".ant-calendar-year-select",
+      "yearElementSelector": ".ant-calendar-year-panel-cell:not(.ant-calendar-year-panel-cell-disabled):not(.ant-calendar-year-panel-last-decade-cell):not(.ant-calendar-year-panel-next-decade-cell)",
+      "yearFilterClasses": false,
+      "decadeSelector": ".ant-calendar-year-panel-decade-select-content",
+      "nextDecadeBtn": ".ant-calendar-year-panel-next-decade-btn",
+      "prevDecadeBtn": ".ant-calendar-year-panel-prev-decade-btn",
+      "monthConfig": ".ant-calendar-month-select",
+      "monthElementSelector": ".ant-calendar-month-panel-month",
+      "dayElementSelector": ".ant-calendar-date",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "antCalendar": {
+      "yearPanelSelector": null,
+      "yearElementSelector": ".ant-calendar-month-panel-year-select-content",
+      "yearFilterClasses": true,
+      "decadeSelector": ".ant-calendar-year-panel-decade-select-content",
+      "nextDecadeBtn": ".ant-calendar-month-panel-next-year-btn",
+      "prevDecadeBtn": ".ant-calendar-month-panel-prev-year-btn",
+      "monthConfig": "",
+      "monthElementSelector": ".ant-calendar-month-panel-month",
+      "dayElementSelector": ".ant-calendar-date",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "antPicker": {
+      "yearPanelSelector": ".ant-picker-year-btn",
+      "yearElementSelector": ".ant-picker-cell-in-view",
+      "yearFilterClasses": false,
+      "decadeSelector": ".ant-picker-decade-btn",
+      "nextDecadeBtn": ".ant-picker-header-super-next-btn",
+      "prevDecadeBtn": ".ant-picker-header-super-prev-btn",
+      "monthConfig": ".ant-picker-month-btn",
+      "monthElementSelector": ".ant-picker-cell",
+      "dayElementSelector": ".ant-picker-cell",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "elDatePicker": {
+      "yearPanelSelector": ".el-date-picker__header-label:not([style*=\"display: none\"])",
+      "yearElementSelector": ".el-year-table a.cell, .el-year-table span.cell, .el-year-table .el-date-table-cell",
+      "yearFilterClasses": [
+        "disabled"
+      ],
+      "decadeSelector": ".el-date-picker__header-label:not([style*=\"display: none\"])",
+      "nextDecadeBtn": ".el-date-picker__next-btn:has(button:not([style*=\"display: none\"])) button:not([style*=\"display: none\"]), .el-date-picker__next-btn:not(:has(button))",
+      "prevDecadeBtn": ".el-date-picker__prev-btn:has(button:not([style*=\"display: none\"])) button:not([style*=\"display: none\"]), .el-date-picker__prev-btn:not(:has(button))",
+      "monthConfig": null,
+      "monthElementSelector": ".el-month-table a.cell, .el-month-table span.cell, .el-month-table .el-date-table-cell",
+      "dayElementSelector": ".el-date-table td.available",
+      "yearRetryTimes": 40,
+      "monthRetryTimes": 12
+    },
+    "antDateRange": {
+      "yearPanelSelector": ".ant-calendar-year-select",
+      "yearElementSelector": ".ant-calendar-year-panel-year",
+      "yearFilterClasses": true,
+      "decadeSelector": ".ant-calendar-year-panel-decade-select-content",
+      "nextDecadeBtn": ".ant-calendar-year-panel-next-decade-btn",
+      "prevDecadeBtn": ".ant-calendar-year-panel-prev-decade-btn",
+      "monthConfig": {
+        "prevMonthSelector": ".ant-calendar-prev-month-btn",
+        "nextMonthSelector": ".ant-calendar-next-month-btn"
+      },
+      "monthElementSelector": ".ant-calendar-month-select",
+      "dayElementSelector": ".ant-calendar-date",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "mokahr": {
+      "yearPanelSelector": "[class^=\"sd-basic-selector-year\"]",
+      "yearElementSelector": "[class^=\"sd-basic-year-item\"]",
+      "yearFilterClasses": true,
+      "decadeSelector": "[class^=\"sd-basic-selector-year\"]",
+      "nextDecadeBtn": "[class*=\"sd-Icon-icondoubleRight\"]",
+      "prevDecadeBtn": "[class*=\"sd-Icon-icondoubleLeft\"]",
+      "monthConfig": "[class^=\"sd-basic-selector-month\"]",
+      "monthElementSelector": "[class^=\"sd-basic-year-item\"]",
+      "dayElementSelector": "[class*=\"sd-basic-date-item\"]",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "feishu": {
+      "yearPanelSelector": ".ud__picker-panel-header-btn",
+      "yearElementSelector": ".ud__picker__cell-interactive-area",
+      "yearFilterClasses": null,
+      "decadeSelector": null,
+      "nextDecadeBtn": ".ud__picker-panel-header-inner > button:nth-child(1)",
+      "prevDecadeBtn": ".ud__picker-panel-header-inner > button:nth-child(2)",
+      "monthConfig": null,
+      "monthElementSelector": ".ud__picker__cell-interactive-area",
+      "dayElementSelector": ".ud__picker__cell-interactive-area",
+      "yearRetryTimes": 60,
+      "monthRetryTimes": 12
+    },
+    "fusionRangePanel": {
+      "yearPanelSelector": null,
+      "yearElementSelector": ".next-calendar-panel-header-full .next-calendar-btn",
+      "yearFilterClasses": false,
+      "decadeSelector": null,
+      "nextDecadeBtn": ".next-calendar-btn-next-year",
+      "prevDecadeBtn": ".next-calendar-btn-prev-year",
+      "monthConfig": null,
+      "monthElementSelector": ".next-calendar-table td.next-calendar-cell",
+      "dayElementSelector": "",
+      "yearRetryTimes": 30,
+      "monthRetryTimes": 12
+    }
+  },
+  "layout_presets": {
+    "antd-form": {
+      "group_class": ".ant-form-item",
+      "level1_class": ".ant-card-head-title, .ant-collapse-header, h2, h3",
+      "level2_class": ".ant-form-item-label label, .ant-form-item-label"
+    },
+    "element-form": {
+      "group_class": ".el-form-item",
+      "level1_class": ".el-collapse-item__header, .el-card__header, h2, h3",
+      "level2_class": ".el-form-item__label"
+    },
+    "mokahr": {
+      "group_class": "[class^=\"apply-block-\"] [class^=\"apply-fields\"]",
+      "level1_class": "[class^=\"apply-block-\"] [class^=\"blockTitle\"] span[class^=\"text-\"]",
+      "level2_class": "[class^=\"apply-block-\"] [class^=\"title-\"]"
+    },
+    "beisen": {
+      "group_class": "[class~=\"ux-standard-form\"], .mainContainer > form .form_container",
+      "level1_class": "[id*=\"_Recruitment_\"]:not(:has(*)), [class^=\"dl_menutit\"]",
+      "level2_class": "[class^=\"form-item__text\"], .form_part_container li > label"
+    },
+    "atsx-form": {
+      "group_class": ".resumeEditForm-item",
+      "level1_class": ".createFormSection-title",
+      "level2_class": ".atsx-form-item-label"
+    },
+    "hotjob": {
+      "group_class": "[class~=\"form-cell-inner\"], .set_i_content_table",
+      "level1_class": ".tit, .setTitle",
+      "level2_class": ".ant-form-item-label, .resume_info_title"
+    },
+    "feishu": {
+      "group_class": ".bitable-form-item",
+      "level1_class": ".bitable-form-item .ud__form__item__label, h2, h3",
+      "level2_class": ".ud__form__item__label label[title], .ud__form__item__label label"
+    }
+  },
+  "non_panel_blocklist": [
+    "tooltip",
+    "toast",
+    "notification",
+    "message",
+    "loading",
+    "spinner",
+    "date-picker",
+    "datepicker",
+    "date-panel",
+    "date-table",
+    "time-picker",
+    "timepicker",
+    "time-panel",
+    "time-spinner",
+    "picker-panel",
+    "picker__popper",
+    "calendar",
+    "md-picker",
+    "el-picker",
+    "ant-picker",
+    "ant-calendar",
+    "ud-picker",
+    "ux-calendar",
+    "rc-picker"
+  ],
+  "date_granularity_hints": {
+    "day": [
+      "yyyy[-/.年]?mm[-/.月]?dd",
+      "yyyymmdd",
+      "年月日",
+      "具体日期"
+    ],
+    "month": [
+      "yyyy[-/.年]?mm(?![-/.月]?dd)",
+      "yyyymm",
+      "年\\s*月",
+      "年月"
+    ],
+    "year": [
+      "yyyy(?![-/.年]?mm)",
+      "年份"
+    ]
+  },
+  "date_granularity_note": "从 placeholder/name/id/title 用这些正则猜「组件支持到哪一级」(day>month>year，按顺序命中)；故意不看 label（「出生日期」这种标签不说明控件粒度）。猜不出就留空，由填充器自适应：只会丢精度并如实上报，绝不会凭空补精度。"
+}
