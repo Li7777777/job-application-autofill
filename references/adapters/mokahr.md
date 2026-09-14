@@ -122,3 +122,84 @@
    「区块+字段名+重复块」去重，同一个下拉不再重复开合（mokahr 的 sd-Select 会登记 input/箭头/图标三条）。
 6. `cdp.mjs`：新增 `front <id>`（`Page.bringToFront`）—— **后台标签页里 rAF/定时器被节流，很多面板根本不会渲染**，
    长批量填表前先 front 一下。
+
+
+---
+
+# 追加（2026-09-14 九坤 UBITALENT 实测）：React16 组件 API 直写 —— 下拉/日期的根治方案
+
+> 此前 mokahr 站「下拉选不中/读不到选项」反复出现的根因：**站点是 React 16**，
+> fiber 键是 `__reactInternalInstance$xxx`（不是 `__reactFiber$`），一切依赖
+> `__reactFiber$` 的 fiber 方案在这个站上天然失灵；而开面板读 DOM 选项又受
+> portal/动画/大列表轮询拖累。**正确姿势：根本不开面板。**
+> 配套脚本：`scripts/25_mokahr_fiber.js`（dump / fill / store 三种模式）。
+
+## 1. 字段组件 API（一次全量读 + 直写，零面板零坐标）
+
+从任意 `[class*="apply-field-"]` 内的 input 沿 fiber `.return` 上爬（≤40 层），
+能找到**字段组件**的 `memoizedProps`，上面挂着整套表单 API：
+
+```
+props.fieldInfo = { id, blockId, name, type, isRequired, options:[{label,value}] }
+props._get_()   → 读当前值          （= store.getValue(fieldId, rowCtx)）
+props._set_(v)  → 写值（推荐主路径）  （= store.setValue(fieldId, v, rowCtx)）
+props._validate_()
+```
+
+- **读选项**：`fieldInfo.options`；若为空（bool_info、远程搜索下拉），从字段块内
+  input 上爬 ≤14 层找 Select 组件（`Array.isArray(props.options) && props.onChange`）拿。
+- **写值**：`_set_(option.value)`，与用户点选同一条链路（触发联动+校验）。
+- **全表校验**：任一 block 组件（`props.blockInfo && props._get_values_`，从字段 fiber
+  上爬 ~13 层）的 `_get_values_()` 返回**整个表单 store** —— 一次调用即可核对全部值。
+  ⚠️ 从字段往上爬是 O(深度)；从根做全树 DFS 在 15 行项目的大表上会超时扫不到。
+
+## 2. 各控件类型的取值形状（实测）
+
+| fieldInfo.type | 控件 | _set_ 参数 | 备注 |
+|---|---|---|---|
+| `select` | sd-Select | `option.value`（字符串，如 '上海市'/'男'） | |
+| `bool_info` | 是/否 | **数字 1/0**（options 里带） | 传 true 会显示空 |
+| `string_info` / `text_info` | 输入框/多行 | 字符串 | 不用 React setter hack |
+| `date_info`（起止年月） | 4 个分片 select | **起始端** `_set_("YYYY-MM")` 直接可用 | 结束端见下 |
+| `date_info`（单端，如获奖时间） | 2 个分片 | `_set_("YYYY-MM")` | |
+| `day_info`（出生日期） | 日历 | `_set_("1999-09-02")` | 组件自己截到月，显示 `1999-09 (27岁)` |
+| `location_info`（籍贯） | Tabs+Tag | `"山西省/晋中市/平遥县"` | |
+| `file_upload` | 上传 | 不可 set，走 DOM.setFileInputFiles | |
+| `confirm_info`（同步更新在线简历） | 开关 | `_set_(false)` | 多岗投递务必关 |
+
+## 3. date_info 的「结束端/至今」（唯一死角）
+
+结束端**没有注册字段**（store 键 `endDate`，但 fieldInfo 里查不到），且日期组件
+`w`（onStartChange/onEndChange 所在对象）是渲染闭包里的局部对象——fiber 实例、
+hooks 链上都找不到，只有 4 个分片 Select 的 `onChange` 闭包能触达：
+
+- **结束年份**：`sels[2].onChange("2026")` → store `endDate="2026-01"` ✓（月份默认 1）
+- **结束月份**：`sels[3].onChange(任何值)` → **会把 endDate 清空** ✗（闭包读
+  `w.endYearAndMonth` 的时序错乱，先月后年也不行）
+- **可靠兜底**：年份走 `sels[2].onChange()`，月份**开面板真实点击**（12 项小列表，
+  单 click 开面板 → 找可见叶子 `[class*="sd-Menu-content-item"]` 精确文本 → click）
+- **「至今」**：块内 `input[type=checkbox]` 的 label `.click()`，store 存字符串 `"至今"`
+
+## 4. 坑
+
+1. ⚠️ **绝不要调 block 级的 `_set_`**：签名是 `setValue(blockId, k, v)`，实测把
+   `projectInfo` 从 15 行数组写成了数字 5，且**异步落库**（草稿被污染、重载后全空，
+   只能重传简历重填）。字段级 `_set_` 才是安全的。
+2. 必填星号判定：`bool_info` 字段的 `data-jaa-required` 会误报 0；以
+   `fieldInfo.isRequired`（组件 API 读到的）为准。
+3. 「添加」重复块：区块根 `[class*="apply-block-"]` 里 `button` 文本 === '添加'
+   连点 n 次；**add 后必须 `await sleep(~600)` 再重建模型**，否则新行不在模型里。
+4. 写后校验用 store（`_get_values_()`）而不是 `_get_()`（后者原样回显写入值，
+   组件炸了也看不出来）；DOM 的「必填项未填写」在程序写入后会残留，但都是隐藏的，
+   以 store 为准。
+5. 换岗位（同站第二份申请）：草稿独立，简历/照片/邮箱要重传重填；
+   「同步更新在线简历」默认勾选，**两份申请都会被反向覆盖**，先 `_set_(false)`。
+
+## 5. ⚠️ 大坑（实测）：同会话切换岗位申请页 = 草稿清零
+
+- 同一 SPA 标签页里从岗位 A 的 `#/job/<A>/apply` 直接 hash 切到岗位 B 的
+  `#/job/<B>/apply`（或反向），**两份草稿都会被重置**（只剩姓名/手机，
+  简历附件也丢）——比「重开丢邮箱/照片」严重得多。
+- 规则：**一个岗位一个标签页**。填完 A 就停在 A 页让用户提交；要填 B 就
+  `cdp.mjs open` 开**新的标签页**操作，绝不 hash 互切。
+- 若已踩坑：重传简历触发解析 → 重跑 fill（引擎幂等，2 分钟恢复）。

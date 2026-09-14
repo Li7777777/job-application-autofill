@@ -76,6 +76,12 @@ browseros-neo_evaluate(page, <scripts/10_scan_form.js 全文>)   # 返回 JSON�
 >
 > **多段经历**（教育背景/实习经历可加条）会拿到 `block = 0,1,2…`；同一字段名在不同块里是**不同的 uid**，
 > 这正是后面能把画像第 1/2 条分别填对的关键。
+
+> **站点是 app.mokahr.com 时，跳过上面这套**，直接用 `scripts/25_mokahr_fiber.js`（快路径）：
+> 该站是 React 16（fiber 键 `__reactInternalInstance$`），通用扫描/填充的 DOM 面板方案天生不稳。
+> 快路径不开任何下拉面板：`dump` 一次拿全部字段的 id/类型/必填/选项/当前值，`fill` 按
+> `(blockId, fid, occ)` 直写组件 API（select/bool/text/日期全类型），`store` 一次读整表做权威校验。
+> 用法与取值形状见 `references/adapters/mokahr.md`《React16 组件 API 直写》一节。
 >
 > 组件框架认错/没认出时，用脚本顶部的 `OVERRIDE = { framework, layout, extraControlSelector }` 覆盖，
 > 并在 `references/adapters/<host>.md` 里记下来。
@@ -197,6 +203,7 @@ python $SKILL/scripts/90_memory.py lookup --host <host>
 | `scripts/10_scan_form.js` | 页面 (evaluate) | 通用扫描：控件/字段名候选/**归一化字段名**/必填判定/选项 + **区块 section**、**重复块 block**、**组件框架 framework**；打 `data-jaa-*` 标记 |
 | `scripts/15_dump_state.js` | 页面 (evaluate) | 导出当前已填状态（值/必填/报错/附件/区块/块/框架） |
 | `scripts/20_fill.js` | 页面 (evaluate) | 通用填充：React/Vue 原生 setter + 模拟输入 + contenteditable + 七大框架下拉/级联 + 日期日历引擎 + 年月分片 + **选项只读探测（probeOptions）**；**带提交按钮拦截** |
+| `scripts/25_mokahr_fiber.js` | 页面 (evaluate) | **mokahr 快路径（React16 组件 API 直写）**：沿 `__reactInternalInstance$` 找字段组件的 `fieldInfo/_get_/_set_`，读选项/写值**零开面板**；`dump`（全量组件模型）/`fill`（set·daterow·add·delLast 步骤）/`store`（整表校验）三种模式；含提交拦截与选项闸门 |
 | `scripts/30_verify.py` | 本地 | 状态 vs 画像/字典 校验（格式/一致性/完整性/**选项闸门**/未映射，按区块分段） |
 | `scripts/40_build_mapping.py` | 本地 | 编译 uid→值 的映射 + 待问用户清单；**多段经历按 (区块,块) 定记录序号**；**选项对不上就阻塞不猜** |
 | `scripts/90_memory.py` | 本地 | 站点记忆 / 问答记忆 / 别名 / **选项对照 `add-option`** / **选项目录 `record-probe`** / 运行日志 |
