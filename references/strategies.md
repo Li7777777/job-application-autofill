@@ -104,6 +104,22 @@ inp.click();
 
 ## 3. 文件上传（`<input type=file>` 不在无障碍树里）
 
+**首选（2026-09 定稿）：文件选择器拦截，一步到位**——对 React 受控 file input 也可靠：
+
+```bash
+# 触发元素表达式文件（返回「点击上传」那个 span/button）：
+#   (() => [...document.querySelectorAll('span')].find(e => e.textContent.trim()==='点击上传'))()
+node scripts/cdp.mjs uploadc <targetId> <触发元素.js> "E:/path/agent.pdf"
+```
+> 拦截模式：`Page.setInterceptFileChooserDialog(true)` → 真实点击触发元素 → 等 `Page.fileChooserOpened`
+> → `DOM.setFileInputFiles({backendNodeId})` → 浏览器走**原生 change** → React onChange 收到。
+> 回读验证：CDP eval 读附件区文本是否出现文件名。
+>
+> ⚠️ **不要用 `DOM.setFileInputFiles` 直接设 input**（`cdp.mjs upload` 旧命令）：不触发 change，
+> 且 React 受控组件在下一帧重置 input —— 文件静默丢失（汇川实测）。
+
+备选（老站 / MCP 侧、file input 非受控时）：
+
 ```js
 // 第一步：显形 + 起个能被 a11y 树读到的名字
 const inp = document.querySelector('input[type=file]');
@@ -117,7 +133,7 @@ inp.scrollIntoView({block:'center'});
 第三步：browseros-neo_upload(page, ref="eN", file="<简历文件的绝对路径>")
 ```
 - 对「上传」按钮的 ref 调 upload 会报 `Node is not a file input element`；
-- **不要真的点击上传按钮**（弹系统文件框，自动化会卡住）；
+- **不要真的点击上传按钮**（弹系统文件框，自动化会卡住；除非用了 uploadc 的拦截模式）；
 - 中文路径先复制到 ASCII 安全目录（`%TEMP%\\wfa\\`）；文件名保留中文没问题（HR 会看到）。
 
 ## 4. 工具技巧
@@ -290,3 +306,40 @@ node scripts/cdp.mjs click <targetId> "span.del-btn"  # 真实鼠标点击
    然后 **reload + 按名称校验**（本次就是靠这一步才发现 13/15 条错位）。
 4. 删除行要**用真实点击**（或 React onClick），并在确认框弹出后再点一次「确认」。
 5. 最后再 dump 一次完整清单交给用户人工复核；**提交/投递按钮永远留给用户**。
+
+### 8.8 混合模式标准流程（2026-09-14 汇川自建站实测定稿；SKILL.md §2 的执行依据）
+
+> 实测背景：react-aria + Tailwind 自建站，9 区块长表单（54→243 字段）、15 个重复项目块、
+> react-aria 多选/级联/搜索树弹层、contenteditable 日期分片、受控 file input。
+> 一次会话内 MCP 重建 **3 次**（含一次由 `browseros-neo_run` 连续报错触发）；CDP 全程无中断。
+
+**分工决策表**（先判类型，再选通道）：
+
+| 控件/任务 | 通道 | 要点 |
+|---|---|---|
+| 页面脚本（扫描/批量直写/状态导出） | CDP `eval` | 输出直落盘；MCP evaluate 有 5000 字符截断，别用来跑脚本 |
+| 文本 / textarea / 原生 `<select>` / 隐藏 `<input type=date>` | CDP `eval` 批量 | native setter + `input`/`change`；逐字段回读 `OK/MISMATCH`；date input 直写后分片显示自动联动 |
+| radio / 开关 / 自定义按钮 | CDP `revalclick`/`clickn`（真实点击） | **合成 `click()` 会假成功**：DOM `checked=true` 但不进 React store，重渲染即丢（实测踩中） |
+| popover 多选/级联/搜索树/日历 | MCP `act` | 真实输入 + 遮挡检测 + diff 回读；开面板→点选项→点面板外空白关闭（Esc/「取消」常被 fixed header 遮挡） |
+| contenteditable 日期分片 | CDP `focus` + MCP `act type` | 合成 `KeyboardEvent` 无效、合成 `beforeinput(insertText)` 可用但不稳；**真实键盘最稳**：focus 年段后一次 type 8 位 `20240901`，逐段自动流转 |
+| 受控 `<input type=file>` | CDP `uploadc`（文件选择器拦截） | `DOM.setFileInputFiles` 直设**不触发 change** 且 React 下一帧重置 input——文件静默丢失（实测踩中） |
+| 滚动/等待 | CDP eval 或 MCP `act scroll`/`wait` | sticky 底栏会盖内容，交互前 `scrollIntoView({block:'center'})` |
+
+**MCP 三条红线**（保证不撞 60s / 不丢归属）：
+
+1. **MCP 只用单步原语**（`tabs`/`snapshot`/`act`/`wait`），页面脚本一律 CDP `eval`；
+   确需 MCP `evaluate` 时单次 ≤ 40 秒（60s 限制留 20s 余量）。
+2. **MCP 调用保持连续**（间隔 < 30 分钟空闲回收阈值）；长批处理交 CDP，MCP 只做短交互。
+3. **CDP 兜底**：报 `page N is not owned by this agent` 时不重开页、不丢状态——
+   `node scripts/cdp.mjs eval/click/revalclick <targetId> …` 直接接管同一页继续干。
+
+**实测数据（混合 vs 纯 CDP vs 纯 MCP）**：
+
+- 批量 45 文本字段：CDP 一次 eval ~5s（MCP evaluate 会被 5000 字符截断 → 捞 tool-output 多一步）。
+- 30 个 date input：CDP 一次 eval ~3s。
+- 加 14 个重复块：CDP 合成 click ×14 ~12s（注意 §5 坑表「找按钮误点其他区块」）。
+- 单步 MCP act（click/type）：每次 ~1-3s 工具往返 + agent 思考时间；质量高（遮挡拦截 + diff 自验证）。
+- 附件：`uploadc` 拦截模式一次成功；`upload` 直设模式 0% 成功（React 重置）。
+
+**经验法则**：能用 CDP 批量的用 CDP；需要「看页面再决定点哪」的交互用 MCP act；
+分片键入用 CDP focus + MCP type；受控上传用 `uploadc`；MCP 一死立即 CDP 接管，绝不重开页面重填。

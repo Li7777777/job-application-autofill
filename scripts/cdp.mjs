@@ -25,6 +25,11 @@
 //                                            # 表达式返回一个元素，对它发真实鼠标点击
 //                                            # （适合「面板里的日期格子」这类每次渲染都换节点的目标）
 //   node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
+//   node cdp.mjs uploadc <id|url片段> <触发元素表达式文件> <本地文件…>
+//                                            # 文件选择器拦截上传（React 受控 file input 唯一可靠路径）
+//   node cdp.mjs focus <id|url片段> <表达式文件>
+//                                            # scrollIntoView + 聚焦任意元素（含 contenteditable 日期分片），
+//                                            # 配合 MCP act type 或本文件 type 命令键入
 //   node cdp.mjs clickn <id|url片段> <表达式文件> [waitMs]
 //   node cdp.mjs seq <id|url片段> <表达式数组.json> [waitMs]   # 多步真实点击（打开面板→选年→选月→选日）
 //   node cdp.mjs type <id|url片段> <表达式文件> <文本文件>      # 真实键盘逐字符输入（进 React state）
@@ -309,8 +314,54 @@ if (cmd === 'revalclick') {
   process.exit(0);
 }
 
+if (cmd === 'uploadc') {
+  // 文件选择器拦截上传（React 受控 <input type=file> 的唯一可靠路径）。
+  // 背景（2026-09-14 汇川实测）：DOM.setFileInputFiles 直接对 input 设置文件**不触发 change**，
+  // 且 React 会在下一帧重置 input —— 文件静默丢失。拦截模式才是真实用户链路：
+  //   Page.setInterceptFileChooserDialog(true) → 真实点击上传触发元素 → 等 Page.fileChooserOpened
+  //   → DOM.setFileInputFiles({backendNodeId}) → 浏览器走原生 change → React onChange 收到。
+  // 用法: node cdp.mjs uploadc <id|url片段> <触发元素表达式文件> <本地文件…>
+  //       触发元素表达式返回「点击上传」那个 span/button（会自动 scrollIntoView）。
+  const [sel, exprFile, ...files] = args;
+  if (!sel || !exprFile || !files.length) { console.error('usage: uploadc <id|url片段> <触发元素表达式文件> <本地文件…>'); process.exit(1); }
+  const expr = readFileSync(exprFile, 'utf8');
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
+  const evs = [];
+  sock.addEventListener('message', ev => { const m = JSON.parse(ev.data); if (m.method) evs.push(m.method); });
+  const chooserP = new Promise(res => sock.addEventListener('message', ev => {
+    const m = JSON.parse(ev.data);
+    if (m.method === 'Page.fileChooserOpened') res(m.params);
+  }, { once: true }));
+  await rpc(sock, 'Page.enable', {});
+  await rpc(sock, 'Page.setInterceptFileChooserDialog', { enabled: true });
+  // 定位触发元素并真实点击
+  const loc = await rpc(sock, 'Runtime.evaluate', {
+    expression: `(() => { const el = (${expr}); if (!el) return JSON.stringify({err:'trigger-not-found'});
+      el.scrollIntoView({block:'center'}); const r = el.getBoundingClientRect();
+      return JSON.stringify({x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2)}); })()`,
+    returnByValue: true,
+  });
+  const locVal = loc.result?.value;
+  if (!locVal) { console.log(JSON.stringify({ ok: false, why: 'locate failed', detail: loc.exceptionDetails?.exception?.description?.slice(0, 200) })); process.exit(0); }
+  const p = JSON.parse(locVal);
+  if (p.err) { console.log(JSON.stringify({ ok: false, why: p.err })); process.exit(0); }
+  await rpc(sock, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', clickCount: 1, buttons: 1 });
+  await rpc(sock, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', clickCount: 1, buttons: 0 });
+  const chooser = await Promise.race([chooserP, new Promise(res => setTimeout(() => res(null), 6000))]);
+  if (!chooser || !chooser.backendNodeId) { console.log(JSON.stringify({ ok: false, why: 'no fileChooserOpened (触发元素没有弹系统文件框？)', recentEvents: evs.slice(-6) })); process.exit(0); }
+  await rpc(sock, 'DOM.setFileInputFiles', { files, backendNodeId: chooser.backendNodeId });
+  await rpc(sock, 'Page.setInterceptFileChooserDialog', { enabled: false });
+  await new Promise(r => setTimeout(r, 1500));
+  console.log(JSON.stringify({ ok: true, mode: chooser.mode, uploaded: files }));
+  process.exit(0);
+}
+
 if (cmd === 'upload') {
-  // 给 <input type=file> 设置本地文件（DOM.setFileInputFiles，等同真实选择文件并触发 change）
+  // 给 <input type=file> 设置本地文件（DOM.setFileInputFiles）。
+  // ⚠️ 仅对「非 React 受控」的 file input 可靠；React 站点请用 uploadc（拦截模式）——
+  // setFileInputFiles 不派发 change，且 React 受控组件会在下一帧重置 input，文件静默丢失。
   // 用法: node cdp.mjs upload <id|url片段> <表达式文件> <本地文件…>
   const [sel, exprFile, ...files] = args;
   if (!sel || !exprFile || !files.length) { console.error('usage: upload <id|url片段> <表达式文件> <本地文件…>'); process.exit(1); }
@@ -326,6 +377,27 @@ if (cmd === 'upload') {
   process.exit(0);
 }
 
+if (cmd === 'focus') {
+  // 定位并聚焦任意元素（含 contenteditable 日期分片），配合 MCP act type 或本文件 type 命令键入。
+  // 用法: node cdp.mjs focus <id|url片段> <表达式文件>
+  const [sel, exprFile] = args;
+  if (!sel || !exprFile) { console.error('usage: focus <id|url片段> <表达式文件>'); process.exit(1); }
+  const expr = readFileSync(exprFile, 'utf8');
+  const page = await findPage(sel);
+  const sock = await connect(page.webSocketDebuggerUrl);
+  await bringToFront(sock);
+  const res = await rpc(sock, 'Runtime.evaluate', {
+    expression: `(() => { const el = (${expr}); if (!el) return JSON.stringify({err:'not-found'});
+      el.scrollIntoView({block:'center'}); el.focus();
+      const a = document.activeElement; const r = a.getBoundingClientRect();
+      return JSON.stringify({focused: a === el, tag: a.tagName, contenteditable: a.isContentEditable, dtype: a.getAttribute && a.getAttribute('data-type'), rect: {x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2)}}); })()`,
+    returnByValue: true,
+  });
+  if (res.exceptionDetails) { console.log(JSON.stringify({ ok: false, why: 'exception', detail: res.exceptionDetails.exception?.description?.slice(0, 200) })); process.exit(0); }
+  console.log(res.result?.value || JSON.stringify({ ok: false, why: 'no value' }));
+  process.exit(0);
+}
+
 if (cmd === 'clickn') {
   // 批量真实点击：表达式返回「元素数组」，对每个元素 scrollIntoView → 取新坐标 → 发真实鼠标点击。
   // 用途：div 版自定义单选/复选/删除按钮（合成 click() 不触发 React 代理事件）。
@@ -337,8 +409,9 @@ if (cmd === 'clickn') {
   const sock = await connect(page.webSocketDebuggerUrl);
   await bringToFront(sock);
   const arrRes = await rpc(sock, 'Runtime.evaluate', { expression: `(${expr})`, returnByValue: false, userGesture: true });
+  if (arrRes.exceptionDetails) { console.log(JSON.stringify({ ok: false, why: 'expression threw', detail: arrRes.exceptionDetails.exception?.description?.slice(0, 200) })); process.exit(0); }
   const arrId = arrRes.result && arrRes.result.objectId;
-  if (!arrId) { console.log(JSON.stringify({ ok: false, why: 'expression did not return an array' })); process.exit(0); }
+  if (!arrId) { console.log(JSON.stringify({ ok: false, why: 'expression did not return an array (got ' + (arrRes.result ? arrRes.result.type : 'nothing') + ') — clickn 需要表达式返回 [元素] 数组' })); process.exit(0); }
   const props = await rpc(sock, 'Runtime.getProperties', { objectId: arrId, ownProperties: true });
   const ids = props.result.filter(x => /^\d+$/.test(x.name) && x.value && x.value.objectId).map(x => x.value.objectId);
   const clicked = [];
@@ -353,7 +426,7 @@ if (cmd === 'clickn') {
     await realClick(sock, box.x, box.y, Number(waitMs || 400));
     clicked.push(box.t);
   }
-  console.log(JSON.stringify({ ok: true, count: ids.length, clicked }));
+  console.log(JSON.stringify({ ok: true, count: ids.length, clicked, ...(ids.length === 0 ? { hint: 'count=0：表达式应返回 [元素] 数组（不是单元素）；且元素必须存在且可见（data-jaa-uid 可能已随重渲染丢失，重新扫描或改用 aria 定位）' } : {}) }));
   process.exit(0);
 }
 
@@ -414,7 +487,8 @@ if (cmd === 'type') {
   let ok = false;
   for (let attempt = 0; attempt < 4 && !ok; attempt++) {
     await realClick(sock, target.x, target.y, 250);
-    const act = await rpc(sock, 'Runtime.evaluate', { expression: `(() => { const a = document.activeElement; if(!a || !(a.tagName==='INPUT'||a.tagName==='TEXTAREA')) return 'not-input:' + (a?a.tagName:'null'); const r = a.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,tag:a.tagName}); })()`, returnByValue: true });
+    // 聚焦校验放行 INPUT/TEXTAREA/contenteditable（react-aria 日期分片是 contenteditable span）
+    const act = await rpc(sock, 'Runtime.evaluate', { expression: `(() => { const a = document.activeElement; if(!a || !(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable)) return 'not-focusable:' + (a?a.tagName:'null'); const r = a.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2,y:r.top+r.height/2,tag:a.tagName}); })()`, returnByValue: true });
     const av = act.result && act.result.value;
     if (av && av.startsWith('{')) {
       const a = JSON.parse(av);
@@ -426,7 +500,7 @@ if (cmd === 'type') {
     if (!ok) await new Promise(res => setTimeout(res, 400));
   }
   if (!ok) { console.log(JSON.stringify({ ok: false, why: 'could not focus the target reliably - refusing to type (would corrupt another field)' })); process.exit(0); }
-  // 全选清空
+  // 全选清空（contenteditable 分片不吃 Ctrl+A，无副作用；逐字符键入会自动覆盖占位段）
   await rpc(sock, 'Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
   await rpc(sock, 'Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 });
   await new Promise(res => setTimeout(res, 150));
