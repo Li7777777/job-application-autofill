@@ -126,7 +126,11 @@
 
 ---
 
-# 追加（2026-09-14 九坤 UBITALENT 实测）：React16 组件 API 直写 —— 下拉/日期的根治方案
+# 追加（2026-09-14 九坤 UBITALENT 实测，已泛化为默认首选策略）：React16 组件 API 直写 —— 下拉/日期的根治方案
+
+> **本节策略已升级为全站默认**：任何站点先跑 `scripts/25_mokahr_fiber.js` 的 `dump`（约 3 秒），
+> `nFields ≥ 10` → 走快路径；`nFields = 0` / 异常 / fill 大面积「字段不在模型」→ 回退通用八步，
+> 并在 `references/adapters/<host>.md` 记一句「无组件 API，走通用方案」，下次不再试。
 
 > 此前 mokahr 站「下拉选不中/读不到选项」反复出现的根因：**站点是 React 16**，
 > fiber 键是 `__reactInternalInstance$xxx`（不是 `__reactFiber$`），一切依赖

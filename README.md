@@ -30,7 +30,7 @@ almost nothing.
   (antd / Element / ATSX / Moka / Beisen / Hotjob / Feishu), the **section** a control lives in, and
   the **repeat-block index** — so multi-entry education/experience blocks map to profile record 1, 2, …
 - **Widget-native filling** (`20_fill.js`) — text via native prototype setters (React/Vue compatible),
-- `scripts/25_mokahr_fiber.js` — **mokahr fast path**: React16 component-API writes (`_set_`), zero dropdown panels. Modes: dump / fill / store.
+- `scripts/25_mokahr_fiber.js` — **component-API fast path (try first on any site)**: React-fiber component-API writes (`_set_`), zero dropdown panels. `dump` decides in ~3s whether the site supports it; if not, fall back to the generic pipeline. Modes: dump / fill / store.
   optional per-character simulated typing, `contenteditable`, native `<select>`, checkbox/radio groups,
   **custom dropdowns** via a real mouse-event sequence (`pointerdown→mousedown→mouseup→click`) with
   panel discovery and a non-panel blocklist, **cascader / tree-select** level-by-level, and read-only
