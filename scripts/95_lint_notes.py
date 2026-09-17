@@ -100,6 +100,9 @@ def main():
     args = ap.parse_args()
 
     repo = os.path.abspath(args.repo)
+    if not os.path.isdir(repo):
+        print("[ERROR] 仓库目录不存在：%s（没扫到任何文件 —— 绝不当成「干净」）" % repo)
+        return 3
     profile_path = os.path.join(args.data_dir or jaa_lib.DATA_DIR, "profile.json")
     tokens = jaa_lib.sensitive_tokens(data_dir=args.data_dir)
 
@@ -115,6 +118,9 @@ def main():
         return 0
 
     files = args.paths or jaa_lib.publishable_files(repo)
+    if not files:
+        print("[ERROR] 在 %s 下没找到任何可扫描文件（是不是路径给错了？）—— 不当成「干净」" % repo)
+        return 3
     hits = jaa_lib.leak_scan(repo_root=repo, tokens=tokens, paths=args.paths)
     hits += jaa_lib.leak_scan_generic(repo_root=repo, paths=args.paths)
     hits = _dedupe(hits)
