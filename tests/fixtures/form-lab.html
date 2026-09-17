@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>JAA 表单实验室（合成页面，无任何真实数据）</title>
+<style>
+  body { font: 14px/1.6 system-ui, sans-serif; margin: 24px; max-width: 900px; }
+  .apply-block-1, .apply-block-2, .apply-block-3, .apply-block-4 { border: 1px solid #ddd; padding: 12px; margin: 12px 0; }
+  .blockTitle-1, .blockTitle-2, .blockTitle-3, .blockTitle-4 { font-weight: 700; margin-bottom: 8px; }
+  .apply-fields-1, .apply-fields-2, .apply-fields-3, .apply-fields-4 { display: flex; gap: 12px; align-items: center; padding: 4px 0; }
+  .title-1, .title-2, .title-3, .title-4 { width: 200px; }
+  .required-asterisk { color: #d00; font-style: normal; }
+  .required-asterisk::before { content: '*'; }
+  input, select { padding: 4px 6px; }
+  .sd-Select-container, .ant-select-selector { border: 1px solid #bbb; padding: 4px 8px; min-width: 220px; cursor: pointer; }
+  .period-box { display: flex; gap: 6px; }
+  .sd-Dropdown-dropdown-1, .sd-Dropdown-dropdown-2, .sd-Dropdown-dropdown-3, .sd-Dropdown-dropdown-4,
+  .ant-select-dropdown { border: 1px solid #bbb; background: #fff; position: absolute; z-index: 10; }
+  .sd-Menu-content-item, .ant-select-item-option { padding: 4px 12px; cursor: pointer; }
+  .ant-picker-dropdown { border: 1px solid #bbb; background: #fff; padding: 8px; position: absolute; z-index: 20; }
+  .ant-picker-cell { display: inline-block; width: 44px; text-align: center; cursor: pointer; }
+  .ant-picker-cell-prev-month, .ant-picker-cell-next-month { color: #bbb; }
+  #log { white-space: pre-wrap; background: #f7f7f7; padding: 8px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<h1>JAA Form Lab</h1>
+<p>合成表单：mokahr 式 <code>sd-Select</code> + antd 式 <code>ant-select/ant-picker</code> + 原生 <code>select</code> + 两段教育背景。仅供 tests/browser_e2e.mjs 使用，无任何真实数据。</p>
+
+<form id="app" onsubmit="window.__submits=(window.__submits||0)+1; return false;">
+
+  <div class="apply-block-1">
+    <div class="blockTitle-1"><span class="text-1">申请信息</span></div>
+    <div class="apply-fields-1">
+      <div class="title-1">意向工作城市<i class="required-asterisk"></i></div>
+      <div class="sd-Select-container" data-select="city" tabindex="0">
+        <input class="sd-Input-display-value-1" readonly placeholder="请选择">
+      </div>
+      <div class="sd-Dropdown-dropdown-1" data-panel="city" style="display:none">
+        <div class="sd-Menu-content-item">北京市</div>
+        <div class="sd-Menu-content-item">上海市</div>
+        <div class="sd-Menu-content-item">广州市</div>
+      </div>
+    </div>
+    <div class="apply-fields-1">
+      <div class="title-1">推荐码</div>
+      <input type="text" id="referral" name="referral">
+    </div>
+  </div>
+
+  <div class="apply-block-2">
+    <div class="blockTitle-2"><span class="text-2">个人信息</span></div>
+    <div class="apply-fields-2">
+      <div class="title-2">姓名<i class="required-asterisk"></i></div>
+      <input type="text" id="name" name="name">
+    </div>
+    <div class="apply-fields-2">
+      <div class="title-2">性别<i class="required-asterisk"></i></div>
+      <div class="sd-Select-container" data-select="gender" tabindex="0">
+        <input class="sd-Input-display-value-2" readonly placeholder="请选择">
+      </div>
+      <div class="sd-Dropdown-dropdown-2" data-panel="gender" style="display:none">
+        <div class="sd-Menu-content-item">男</div>
+        <div class="sd-Menu-content-item">女</div>
+      </div>
+    </div>
+    <div class="apply-fields-2">
+      <div class="title-2">出生日期 (年龄)<i class="required-asterisk"></i></div>
+      <input type="text" id="birth" readonly placeholder="请选择日期">
+    </div>
+    <div class="apply-fields-2">
+      <div class="title-2">出生年月</div>
+      <input type="text" id="birthYm" readonly placeholder="请选择年月">
+    </div>
+  </div>
+
+  <div class="apply-block-3">
+    <div class="blockTitle-3"><span class="text-3">教育背景</span></div>
+
+    <div class="apply-fields-3" data-edu="0">
+      <div class="title-3">学校名称</div>
+      <div class="sd-Select-container" data-select="school0" tabindex="0">
+        <input class="sd-Input-display-value-3" data-display="school0" readonly placeholder="请选择">
+      </div>
+      <div class="sd-Dropdown-dropdown-3" data-panel="school0" style="display:none">
+        <div class="sd-Menu-content-item">甲大学</div>
+        <div class="sd-Menu-content-item">乙大学</div>
+        <div class="sd-Menu-content-item">丙大学</div>
+      </div>
+    </div>
+    <div class="apply-fields-3" data-edu="0">
+      <div class="title-3">专业名称</div>
+      <input type="text" id="major0" name="major0">
+    </div>
+    <div class="apply-fields-3" data-edu="0">
+      <div class="title-3">学历</div>
+      <select id="degree0" name="degree0">
+        <option value="">请选择</option><option value="bk">本科</option><option value="ss">硕士</option><option value="bs">博士</option>
+      </select>
+    </div>
+    <div class="apply-fields-3" data-edu="0">
+      <div class="title-3">入学时间</div>
+      <div class="period-box">
+        <select id="enrollY0" name="enrollY0"><option value="">请选择</option><option>2021年</option><option>2022年</option><option>2023年</option><option>2024年</option></select>
+        <select id="enrollM0" name="enrollM0"><option value="">请选择</option><option>1月</option><option>2月</option><option>3月</option><option>4月</option><option>5月</option><option>6月</option><option>7月</option><option>8月</option><option>9月</option><option>10月</option><option>11月</option><option>12月</option></select>
+      </div>
+    </div>
+
+    <div class="apply-fields-3" data-edu="1">
+      <div class="title-3">学校名称</div>
+      <div class="sd-Select-container" data-select="school1" tabindex="0">
+        <input class="sd-Input-display-value-3" data-display="school1" readonly placeholder="请选择">
+      </div>
+      <div class="sd-Dropdown-dropdown-3" data-panel="school1" style="display:none">
+        <div class="sd-Menu-content-item">甲大学</div>
+        <div class="sd-Menu-content-item">乙大学</div>
+        <div class="sd-Menu-content-item">丙大学</div>
+      </div>
+    </div>
+    <div class="apply-fields-3" data-edu="1">
+      <div class="title-3">专业名称</div>
+      <input type="text" id="major1" name="major1">
+    </div>
+    <div class="apply-fields-3" data-edu="1">
+      <div class="title-3">学历</div>
+      <select id="degree1" name="degree1">
+        <option value="">请选择</option><option value="bk">本科</option><option value="ss">硕士</option><option value="bs">博士</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="apply-block-4">
+    <div class="blockTitle-4"><span class="text-4">附加信息</span></div>
+    <div class="apply-fields-4">
+      <div class="title-4">是否同意调剂<i class="required-asterisk"></i></div>
+      <div class="ant-select" data-select="adjust" tabindex="0">
+        <div class="ant-select-selector"><span class="ant-select-selection-item"></span><input class="ant-select-selection-search-input" readonly></div>
+      </div>
+      <div class="ant-select-dropdown ant-select-dropdown-hidden" data-panel="adjust" style="display:none">
+        <div class="ant-select-item-option">是</div>
+        <div class="ant-select-item-option">否</div>
+        <div class="ant-select-item-option">待定</div>
+      </div>
+    </div>
+    <div class="apply-fields-4">
+      <div class="title-4">手机号码</div>
+      <input type="tel" id="phone" name="phone">
+    </div>
+  </div>
+
+  <button type="submit" id="submitBtn">提交申请</button>
+</form>
+
+<div class="ant-picker-dropdown" id="picker" style="display:none">
+  <div class="ant-picker-header">
+    <button type="button" class="ant-picker-header-super-prev-btn">«</button>
+    <button type="button" class="ant-picker-header-super-next-btn">»</button>
+    <span class="ant-picker-decade-btn">1990-2001</span>
+    <button type="button" class="ant-picker-year-btn">1999年</button>
+    <button type="button" class="ant-picker-month-btn">9月</button>
+  </div>
+  <div class="ant-picker-body" id="pickerBody"></div>
+</div>
+
+<div id="log"></div>
+
+<script>
+(() => {
+  'use strict';
+  window.__submits = 0;
+  window.__optionClicks = [];      // 记录「哪一个选项被点过」——用来断言没有误点近似项
+  window.__panelOpens = 0;
+
+  const log = m => { document.getElementById('log').textContent += m + '\n'; };
+
+  // ---- mokahr 式 sd-Select ----
+  const selectMap = {
+    city: '.sd-Input-display-value-1',
+    gender: '.sd-Input-display-value-2',
+    school0: 'input[data-display="school0"]',
+    school1: 'input[data-display="school1"]'
+  };
+  document.querySelectorAll('.sd-Select-container').forEach(box => {
+    const name = box.getAttribute('data-select');
+    box.addEventListener('click', () => {
+      const panel = document.querySelector(`.sd-Dropdown-dropdown-1[data-panel="${name}"], .sd-Dropdown-dropdown-2[data-panel="${name}"], .sd-Dropdown-dropdown-3[data-panel="${name}"]`);
+      if (!panel) return;
+      const open = panel.style.display !== 'none';
+      hideAllPanels();
+      if (!open) { panel.style.display = 'block'; window.__panelOpens++; }
+    });
+  });
+
+  // ---- antd 式 ant-select ----
+  document.querySelectorAll('.ant-select').forEach(box => {
+    const name = box.getAttribute('data-select');
+    box.querySelector('.ant-select-selector').addEventListener('click', () => {
+      const panel = document.querySelector(`.ant-select-dropdown[data-panel="${name}"]`);
+      const open = panel.style.display !== 'none';
+      hideAllPanels();
+      if (!open) { panel.style.display = 'block'; panel.classList.remove('ant-select-dropdown-hidden'); window.__panelOpens++; }
+    });
+  });
+
+  // ---- 选项点击（两类组件共用：只在同一面板内生效）----
+  document.addEventListener('click', e => {
+    const opt = e.target.closest('.sd-Menu-content-item, .ant-select-item-option');
+    if (!opt) return;
+    const panel = opt.closest('[data-panel]');
+    if (!panel || panel.style.display === 'none') return;
+    const name = panel.getAttribute('data-panel');
+    window.__optionClicks.push({ panel: name, text: opt.textContent.trim() });
+    if (panel.classList.contains('ant-select-dropdown')) {
+      panel.closest('.apply-fields-4').querySelector('.ant-select-selection-item').textContent = opt.textContent.trim();
+    } else {
+      const sel = selectMap[name];
+      if (sel) document.querySelector(sel).value = opt.textContent.trim();
+    }
+    panel.style.display = 'none';
+  });
+
+  function hideAllPanels() {
+    document.querySelectorAll('[data-panel]').forEach(p => { p.style.display = 'none'; });
+  }
+  document.addEventListener('mousedown', e => {
+    if (e.target.closest('[data-panel]') || e.target.closest('.sd-Select-container') || e.target.closest('.ant-select')) return;
+    if (['birth', 'birthYm'].includes(e.target.id) || e.target.closest('#picker')) return;
+    hideAllPanels();
+  });
+
+  // ---- antPicker 式日历面板（antPicker 预设：year → month → day）----
+  const picker = document.getElementById('picker');
+  const body = document.getElementById('pickerBody');
+  let mode = 'year', decade = 1990, curY = 1999, curM = 9;
+  let currentInput = null;      // 哪个输入框打开了面板（两个输入共用一个面板，模拟 antd 的实例面板）
+
+  const cell = (text, cls) => `<span class="ant-picker-cell ${cls}">${text}</span>`;
+  function render() {
+    if (mode === 'year') {
+      let h = '';
+      for (let y = decade; y < decade + 12; y++) h += cell(y + '年', 'ant-picker-cell-in-view');
+      body.innerHTML = h;
+    } else if (mode === 'month') {
+      let h = '';
+      for (let m = 1; m <= 12; m++) h += cell(m + '月', 'ant-picker-cell-in-view');
+      body.innerHTML = h;
+    } else {
+      const days = new Date(curY, curM, 0).getDate();
+      let h = cell(28, 'ant-picker-cell-prev-month');
+      for (let d = 1; d <= days; d++) h += cell(d, 'ant-picker-cell-in-view');
+      h += cell(1, 'ant-picker-cell-next-month');
+      body.innerHTML = h;
+    }
+    document.querySelector('.ant-picker-year-btn').textContent = curY + '年';
+    document.querySelector('.ant-picker-month-btn').textContent = curM + '月';
+    document.querySelector('.ant-picker-decade-btn').textContent = decade + '-' + (decade + 11);
+  }
+
+  document.getElementById('birth').addEventListener('click', () => {
+    currentInput = document.getElementById('birth');
+    mode = 'year'; decade = Math.floor(curY / 12) * 12;
+    render(); picker.style.display = 'block'; window.__panelOpens++;
+  });
+  document.getElementById('birthYm').addEventListener('click', () => {
+    currentInput = document.getElementById('birthYm');
+    mode = 'year'; decade = Math.floor(curY / 12) * 12;
+    render(); picker.style.display = 'block'; window.__panelOpens++;
+  });
+  document.querySelector('.ant-picker-header-super-prev-btn').addEventListener('click', () => {
+    if (mode === 'year') { decade -= 12; } else { curY -= 1; }
+    render();
+  });
+  document.querySelector('.ant-picker-header-super-next-btn').addEventListener('click', () => {
+    if (mode === 'year') { decade += 12; } else { curY += 1; }
+    render();
+  });
+  body.addEventListener('click', e => {
+    const c = e.target.closest('.ant-picker-cell');
+    if (!c || c.classList.contains('ant-picker-cell-prev-month') || c.classList.contains('ant-picker-cell-next-month')) return;
+    const n = parseInt(c.textContent, 10);
+    const pad = x => String(x).padStart(2, '0');
+    if (mode === 'year') { curY = n; mode = 'month'; render(); }
+    else if (mode === 'month') {
+      curM = n;
+      if (currentInput && currentInput.id === 'birthYm') {
+        // 年月粒度控件：选完月即结束，不出现「日」面板 —— 模拟 mokahr「出生年月」
+        const val = curY + '-' + pad(curM);
+        currentInput.value = val; currentInput.setAttribute('value', val);
+        picker.style.display = 'none';
+      } else { mode = 'day'; render(); }
+    } else {
+      const val = curY + '-' + pad(curM) + '-' + pad(n);
+      if (currentInput) { currentInput.value = val; currentInput.setAttribute('value', val); }
+      picker.style.display = 'none';
+    }
+  });
+
+  log('ready');
+})();
+</script>
+</body>
+</html>
