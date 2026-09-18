@@ -1,10 +1,11 @@
 ---
 name: job-application-autofill
 description: 面向简历投递 / 校招网申的自动填表 skill（站点无关）。给定用户提供的招聘网站或申请页链接：扫描表单与必填项（含区块/多段经历/组件框架识别）→ 上传简历触发解析预填 → 用画像与记忆编译字段映射（选项对不上一律只出建议）→ 用站点内置组件（自定义下拉、级联、日期日历、文件上传）自动填入 → 程序化校验后交用户审核；并把「字段名→取值」持续沉淀成可复用的问答记忆、选项对照与站点记忆，下次投递越用越快。内置 antd/ElementUI/ATSX/Moka/北森/Hotjob/飞书 七大 ATS 框架的控件与日历配方。遇到不确定一律问用户、绝不猜测，且**绝不代替用户提交**。当用户要投简历、填网申/校招申请表/报名/登记表/求职申请，或给出 URL 说「帮我填一下」「帮我投」时使用。
-version: 1.1.0
+version: 1.2.0
 metadata:
-  verified_sites: "app.mokahr.com（自定义组件重型表单）、selenium web-form（原生控件全类型）"
+  verified_sites: "app.mokahr.com（自定义组件重型表单，React16 fiber 直写）、recruit.sinovatio.com（Vue2+Vuetify2，组件 formData 直读）、recruit.inovance.com（react-aria）、wecruit.hotjob.cn（Hotjob）、sokon.zhiye.com / cxmt.zhiye.com / coamc.zhiye.com / zhaopin.chnenergy.com.cn（北森 zhiye 系）、career.honor.com、selenium web-form（原生控件全类型）"
   data_dir: "<运行环境>/data（skill 安装目录下，已 gitignore）；可用 $JAA_DATA_DIR 覆盖"
+  leak_guard: "scripts/95_lint_notes.py + tests/selftest.py 第 11 组：拿 data/profile.json 里真实取值当黑名单扫可发布文件；jaa-leak-allow 可豁免站点公开选项表"
   framework_recipes: "antd / element(ElementUI+Plus) / atsx / mokahr / beisen / hotjob / feishu"
 ---
 

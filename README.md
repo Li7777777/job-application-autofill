@@ -8,6 +8,17 @@ the result back to you for review.
 
 > **It never submits.** Buttons matching *submit / apply / send / next / pay / delete* are hard-blocked
 > inside the fill script. When anything is ambiguous it **asks the user** — it does not guess.
+>
+> **Personal data can never reach this repo.** Everything personal lives in the gitignored
+> `<runtime>/data/`; site notes must use placeholders. The leak guard builds a denylist from the
+> profile itself (name / phone / birth date / native place / school / employer / local paths) and
+> fails the test suite if any of it shows up in a publishable file — see
+> [Leak guard](#leak-guard-personal-data-must-never-reach-the-repo).
+
+**最近更新（v1.2.0）**
+- 🛡️ **新增泄漏守卫**：`scripts/95_lint_notes.py`（`--fix` 一键脱敏）+ `tests/selftest.py` 第 11 组把画像取值当黑名单扫可发布文件；沉淀（`90_memory.py record`）时自动提醒 —— 站点公开选项表这类真实值用 `jaa-leak-allow` 显式豁免。
+- 📓 **新增 `references/adapters/_TEMPLATE.md`**：新站点笔记从已脱敏的骨架起步，从源头避免把「本次填了什么」写进会发布的文件。
+- 🧭 SKILL.md 新增**铁律 4：个人数据只许进 `data/`，仓库里只写占位符**；已验证站点清单刷新为 10 个。
 
 **Languages:** [中文说明](#中文说明) ・ English above
 
@@ -146,6 +157,33 @@ tests/selftest.py             # no-browser test suite (incl. leak guard + config
 | Consent checkboxes (privacy/terms) stay untouched | not filled unless the user explicitly asks |
 | Personal data never enters the repo | `jaa_lib.DATA_DIR` = `<runtime env>/data` (gitignored), override with `$JAA_DATA_DIR`. Enforced by the **leak guard**: `jaa_lib.sensitive_tokens()` builds a denylist from `data/profile.json` + Q&A memory, and any of those values (name / phone / email / birth date / native place / school / major / employer / resume filename / local path) found in a publishable file fails `tests/selftest.py`. Run `python scripts/95_lint_notes.py` (or `--fix`) after writing site notes; a line that legitimately needs a real value (e.g. the site's own public option list) opts out with a `jaa-leak-allow` comment |
 | Read-only or locked fields are reported, not forced | `20_fill.js` fails loudly with `readOnly=...` |
+
+### Leak guard (personal data must never reach the repo)
+
+Anything you learn while filling a form (name, phone, birth date, native place, school, employer,
+resume filename, local paths) belongs in the gitignored `<runtime>/data/`. Site notes under
+`references/adapters/` are **published**, so they must use placeholders.
+
+The guard does not rely on remembering that: `jaa_lib.sensitive_tokens()` derives a denylist **from
+your own profile + Q&A memory**, and both the test suite and the lint tool check every publishable
+file against it.
+
+```bash
+python scripts/95_lint_notes.py                      # scan (exit 2 on hits), excludes gitignored data/
+python scripts/95_lint_notes.py --fix                # rewrite hits as placeholders (<姓名> <手机号> <YYYY-MM-DD> …)
+python scripts/95_lint_notes.py --paths references/adapters/<host>.md   # just the note you wrote
+python scripts/95_lint_notes.py --list-tokens        # show the current denylist
+python tests/selftest.py                             # group 11 enforces the same thing
+```
+
+- Dates get word boundaries, so an example date written in the docs is never confused with a real
+  birthday whose year-month happens to match.
+- A line that legitimately needs a real value (e.g. the site's own public province→city option list)
+  opts out explicitly with a `jaa-leak-allow` comment; the report lists every exempted line so the
+  escape hatch stays auditable.
+- `python scripts/90_memory.py record …` runs the check on that site's note automatically and prints
+  the fix command, so leakage is caught at sedimentation time.
+- Scanning nothing is an error, never a pass: a wrong `--repo` path exits 3 instead of printing OK.
 
 ## Supported / not yet supported
 
