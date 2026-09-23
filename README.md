@@ -15,6 +15,14 @@ the result back to you for review.
 > fails the test suite if any of it shows up in a publishable file — see
 > [Leak guard](#leak-guard-personal-data-must-never-reach-the-repo).
 
+**最近更新（v1.3.0）**
+- 🔀 **执行模式改为 MCP-first**：默认全流程走 `browseros-neo`（tabs/wait/evaluate/act/upload）；
+  `scripts/cdp.mjs` 降级为显式备用（仅 ownership 丢失、真实交互连续失败、受控上传失败时接管同一页）。
+- ⏱️ **超时治理**：页面脚本默认 18s 业务预算（`20_fill.js` 的 `maxRunMs`/`maxJobs`、`25_mokahr_fiber.js` 的
+  `maxRunMs`/`maxSteps`），预算用尽返回 `deferred` 而非假失败；MCP `evaluate` 调用 timeout ≤25s；
+  探测（probeOptions）默认 16s 预算并沿用 localStorage 断点缓存；add/delLast 部分完成后按剩余数续做，不重复增删。
+- 🧪 真机 e2e 新增短批次协议验证（maxJobs 触发 `budgetExceeded`/`deferred`，主填充同页续完）。
+
 **最近更新（v1.2.0）**
 - 🛡️ **新增泄漏守卫**：`scripts/95_lint_notes.py`（`--fix` 一键脱敏）+ `tests/selftest.py` 第 11 组把画像取值当黑名单扫可发布文件；沉淀（`90_memory.py record`）时自动提醒 —— 站点公开选项表这类真实值用 `jaa-leak-allow` 显式豁免。
 - 📓 **新增 `references/adapters/_TEMPLATE.md`**：新站点笔记从已脱敏的骨架起步，从源头避免把「本次填了什么」写进会发布的文件。
@@ -69,11 +77,11 @@ almost nothing.
   2. `sites/<host>.json` — per-site `label → canonical`, section/block, control kind, recipe,
      observed option samples, learned **value→option** map, ok/fail counters
   3. `runs.jsonl` — append-only run log
-- **Long jobs go straight to CDP** (`cdp.mjs`) — the agent-side MCP tools cap `evaluate` at 60s and scope
-  page ownership to the MCP session, so a multi-minute fill loses its tabs mid-run. `scripts/cdp.mjs` talks
-  to the browser's own CDP port (default `127.0.0.1:9110`, read from the browser's `config.json`) instead:
-  no ownership guard, no 60s cap, one tab (`open` … `close`), and real `Input.dispatchMouseEvent` clicks for
-  hover-only controls. See `references/strategies.md` §8.
+- **BrowserOS MCP first, resumable by design** — the normal path uses `browseros-neo` for opening tabs,
+  waiting for rendering, scanning, uploads, widget interaction, and verification. Page scripts are run as
+  short `evaluate` batches (default budget ~18s, below the MCP 30s transport cap); `20_fill.js` returns
+  `deferred` work and can be run again on the same page. `scripts/cdp.mjs` is an explicit fallback only
+  for MCP ownership loss, unsupported file-chooser flows, or a proven MCP interaction failure.
 - **Tested against a real browser** — `tests/browser_e2e.py` drives `tests/fixtures/form-lab.html` (a synthetic
   form with mokahr-style `sd-Select`, antd-style `ant-select`/`ant-picker`, a native `<select>`, two education
   blocks, a year+month segmented pair and a submit button) through the whole pipeline, and asserts the dropdowns
@@ -85,9 +93,9 @@ almost nothing.
 
 ## Requirements
 
-- An agent with browser tools (tested with the `browseros-neo` MCP server: `tabs_new`, `evaluate`,
-  `snapshot`, `upload`). Any Playwright/CDP-capable setup can run the JS scripts instead.
-- Python 3.8+ (stdlib only — no pip install).
+- **An agent with browser tools**, preferably the `browseros-neo` MCP server (`tabs`, `wait`, `snapshot`,
+  `evaluate`, `act`, `upload`). Python 3.8+ is required for the local compiler and verifier. Node 18+
+  is optional and only needed for the CDP fallback in `scripts/cdp.mjs`.
 
 ## Quick start
 
@@ -95,18 +103,20 @@ almost nothing.
 # 1) first run creates ./data (the runtime env dir, gitignored) and seeds profile + runtime dictionary
 python scripts/40_build_mapping.py --scan examples/example.scan.json     # will tell you what's missing
 
-# 2) in your browser tools: open the target page and run the scanner
-#    evaluate(page, <scripts/10_scan_form.js>)  ->  save the JSON to data/runs/<host>-scan.json
+# 2) in browseros-neo MCP: open the page, wait for the form, then scan it with a short evaluate call
+#    tabs new <url> → wait(for="selector", value="form, input, textarea") → evaluate(page, <10_scan_form.js>)
+#    save the returned JSON to data/runs/<host>-scan.json
 
 # 3) compile mapping + the "ask the user" list
 python scripts/40_build_mapping.py --scan data/runs/<host>-scan.json
 #    exit code 2 = there are blocking questions -> ask the user, then:
 #    python scripts/90_memory.py add-qa --question "<question text>" --answer "<answer>"
 
-# 4) fill in the browser
-#    evaluate(page, <scripts/20_fill.js with MAPPING from mapping.json>, timeout=120000)
+# 4) in browseros-neo MCP: run 20_fill.js with the mapping and a short budget
+#    evaluate(page, <scripts/20_fill.js with MAPPING, maxRunMs=18000>, timeout=25000)
+#    if the result has deferred entries, repeat the same call on the same page until deferred is empty
 
-# 5) verify, then hand the report to the human
+# 5) verify in browseros-neo MCP with another short evaluate call, then save the JSON locally
 #    evaluate(page, <scripts/15_dump_state.js>)  -> data/runs/<host>-state.json
 python scripts/30_verify.py --state data/runs/<host>-state.json --scan data/runs/<host>-scan.json \
     --mapping data/runs/<host>-mapping.json
@@ -128,13 +138,13 @@ scripts/30_verify.py          # local: state vs profile/dictionary checks (incl.
 scripts/40_build_mapping.py   # local: compile mapping + human-question list
 scripts/90_memory.py          # local: site memory / Q&A memory / aliases / option map / run log
 scripts/95_lint_notes.py      # local: leak lint for publishable files (profile-driven) + --fix redaction
-scripts/cdp.mjs               # local (Node): drive the browser over its native CDP port — for long jobs
+scripts/cdp.mjs               # local Node fallback: take over the same page only when MCP cannot continue
 scripts/jaa_lib.py            # local: label/option normalization, dictionary matching, format checks, leak scan
 dev/check_js.js               # local (Node): parse the page scripts as evaluate function bodies
 tests/fixtures/form-lab.html  # synthetic form (mokahr sd-Select + antd ant-select/ant-picker + native select)
 tests/browser_e2e.py          # real-browser end-to-end run against the fixture (auto-SKIPs without a browser)
 references/component-recipes.md# 7 ATS frameworks: dropdowns, cascaders, calendars, panel filtering
-references/strategies.md      # general heuristics, tool gotchas, CDP workarounds
+references/strategies.md      # general heuristics, MCP-first workflow, timeout handling, CDP fallback
 references/adapters/mokahr.md # site-specific notes (mokahr ATS)
 references/adapters/_TEMPLATE.md # sanitized skeleton for a new site note (placeholders only)
 assets/canonical-fields.spec.json  # canonical field dictionary seed (no personal data)

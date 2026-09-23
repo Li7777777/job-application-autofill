@@ -12,12 +12,14 @@
 // 任一 block 组件的 _get_values_() 返回**整表 store**，一次调用即可全量核对。
 // 详见 references/adapters/mokahr.md《React16 组件 API 直写》一节。
 //
-// 用法：把下面 __CONFIG__ 替换成实际配置后，整段粘进 browseros-neo_evaluate(page)，
-// 或生成临时文件走 `node scripts/cdp.mjs eval <target> <file> 600000`（推荐，长任务无 60s 限制）：
+// 用法：优先在 browseros-neo_evaluate 中按短批次运行（单次 timeout ≤25000ms）。
+// 只有 MCP 无法完成真实交互或会话归属丢失时，才用 scripts/cdp.mjs 备用接管。
 //   python -c "import json,pathlib; s=pathlib.Path('scripts/25_mokahr_fiber.js').read_text(encoding='utf-8'); pathlib.Path('_run.js').write_text(s.replace('__CONFIG__', json.dumps({'mode':'dump'})), encoding='utf-8')"
 //
 // CONFIG 形状：
-//   { mode: 'dump' | 'fill' | 'store', stepDelayMs: 240, steps: [...] }
+//   { mode: 'dump' | 'fill' | 'store', stepDelayMs: 240, maxRunMs: 18000, maxSteps: 0, steps: [...] }
+// maxRunMs/maxSteps 用于 browseros-neo 的短调用；返回 deferred 后，把它作为下一次 CONFIG.steps 续做。
+// 特别是 add/delLast 不能重放整个原 CONFIG，否则会重复增删记录。
 // steps 每项（按「区块 blockId + 字段 fid + 出现序号 occ」定位，不依赖 DOM uid，重渲染不失效）：
 //   {a:'set',     blockId:'basicInfo', fid:'gender',  occ:0, v:'男'}                 // select/bool/text/date 起始端
 //   {a:'daterow', blockId:'projectInfo', fid:'startDate', occ:0, start:'2026-03', end:'至今'|'2026-06'}
@@ -41,6 +43,14 @@ var CONFIG = __CONFIG__;
 return (async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const STEP = CONFIG.stepDelayMs || 240;
+  const startedAt = Date.now();
+  const maxRunMs = Math.max(0, Number(CONFIG.maxRunMs ?? 18000) || 0);
+  const maxSteps = Math.max(0, Number(CONFIG.maxSteps) || 0);
+  let executedSteps = 0;
+  let budgetExceeded = false;
+  const deferred = [];
+  const timeExpired = () => maxRunMs > 0 && Date.now() - startedAt >= maxRunMs;
+  const shouldYield = () => timeExpired() || (maxSteps > 0 && executedSteps >= maxSteps);
   let FKEY = null;
   const fkey = el => { if (FKEY) return FKEY; for (const k of Object.keys(el)) if (/^__reactInternalInstance\$|^__reactFiber\$/.test(k)) { FKEY = k; break; } return FKEY; };
   const norm = s => String(s == null ? '' : s).replace(/[\s\u3000]/g, '').replace(/[（(].*?[)）]/g, '').replace(/[:：*＊]/g, '').toLowerCase();
@@ -97,20 +107,23 @@ return (async () => {
   // ---------- 重复块按钮（「添加」/「删除本条」是行管理，不是提交） ----------
   const SUBMIT_RE = /提交|投递|申请并|确认|发送|支付|删除全部|下一步|完成|submit|apply now|send|confirm|pay/i;
   function blockRootOf(blockId) { const m = model.find(x => x.blockId === blockId); const el = m && m.dom; return el ? el.closest('[class*="apply-block-"]') : null; }
-  function clickAdd(blockId, n) { const br = blockRootOf(blockId); if (!br) return { ok: false, why: '找不到区块 ' + blockId };
+  function clickAdd(blockId, n) { const br = blockRootOf(blockId); if (!br) return { ok: false, why: '找不到区块 ' + blockId, n: 0 };
     const btn = [...br.querySelectorAll('button')].find(e => (e.textContent || '').trim() === '添加' && !SUBMIT_RE.test(e.textContent || ''));
-    if (!btn) return { ok: false, why: '找不到「添加」按钮' };
-    for (let i = 0; i < n; i++) btn.click();
-    return { ok: true, n }; }
-  async function delLast(blockId, n) { const br = blockRootOf(blockId); if (!br) return { ok: false, why: '找不到区块 ' + blockId };
-    for (let i = 0; i < n; i++) {
+    if (!btn) return { ok: false, why: '找不到「添加」按钮', n: 0 };
+    let done = 0;
+    for (; done < n; done++) { if (timeExpired()) return { ok: done > 0, n: done, incomplete: true }; btn.click(); }
+    return { ok: true, n: done }; }
+  async function delLast(blockId, n) { const br = blockRootOf(blockId); if (!br) return { ok: false, why: '找不到区块 ' + blockId, n: 0 };
+    let done = 0;
+    for (; done < n; done++) {
+      if (timeExpired()) return { ok: done > 0, n: done, incomplete: true };
       const btns = [...br.querySelectorAll('button')].filter(e => (e.textContent || '').trim() === '删除本条');
-      if (!btns.length) return { ok: i > 0, why: '第 ' + (i + 1) + ' 次找不到「删除本条」', n: i };
+      if (!btns.length) return { ok: done > 0, why: '第 ' + (done + 1) + ' 次找不到「删除本条」', n: done };
       btns[btns.length - 1].scrollIntoView({ block: 'center' });
       btns[btns.length - 1].click();
       await sleep(STEP * 2);
     }
-    return { ok: true, n }; }
+    return { ok: true, n: done }; }
 
   // ---------- 月份分片兜底：开一次面板真实点击（12 项小列表；onChange 写月份会清空 endDate） ----------
   const OPT_LEAF = '[class*="sd-Menu-content-item"],[class*="option-label"],[class*="sd-Select-common-item"]';
@@ -171,15 +184,40 @@ return (async () => {
     return { mode: 'dump', url: location.href, nFields: model.length, byBlock };
   }
 
-  // ---------- FILL 模式 ----------
   const results = [];
-  for (const st of (CONFIG.steps || [])) {
-    if (st.a === 'add') { const r = clickAdd(st.blockId, st.n || 1);
-      if (r.ok) { await sleep(600); model = buildModel(); }              // ⚠️ add 后必须等重渲染再重建模型
-      results.push({ ...st, ok: r.ok, why: r.why }); continue; }
-    if (st.a === 'delLast') { const r = await delLast(st.blockId, st.n || 1);
-      if (r.ok) { await sleep(400); model = buildModel(); }
-      results.push({ ...st, ok: r.ok, why: r.why, deleted: r.n }); continue; }
+  const steps = CONFIG.steps || [];
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    if (shouldYield()) {
+      budgetExceeded = true;
+      deferred.push(...steps.slice(stepIndex));
+      break;
+    }
+    executedSteps++;
+    const st = steps[stepIndex];
+    if (st.a === 'add') {
+      const wantN = st.n || 1, r = clickAdd(st.blockId, wantN);
+      if (r.n > 0) { await sleep(600); model = buildModel(); }           // ⚠️ add 后必须等重渲染再重建模型
+      results.push({ ...st, ok: r.ok, why: r.why, added: r.n, partial: !!r.incomplete });
+      if (r.incomplete) {
+        budgetExceeded = true;
+        if (wantN - r.n > 0) deferred.push({ ...st, n: wantN - r.n });
+        deferred.push(...steps.slice(stepIndex + 1));
+        break;
+      }
+      continue;
+    }
+    if (st.a === 'delLast') {
+      const wantN = st.n || 1, r = await delLast(st.blockId, wantN);
+      if (r.n > 0) { await sleep(400); model = buildModel(); }
+      results.push({ ...st, ok: r.ok, why: r.why, deleted: r.n, partial: !!r.incomplete });
+      if (r.incomplete) {
+        budgetExceeded = true;
+        if (wantN - r.n > 0) deferred.push({ ...st, n: wantN - r.n });
+        deferred.push(...steps.slice(stepIndex + 1));
+        break;
+      }
+      continue;
+    }
     const m = target(st);
     if (!m) { results.push({ ...st, ok: false, why: '字段不在模型 ' + st.blockId + '/' + st.fid + ' occ' + (st.occ || 0) }); continue; }
 
@@ -188,6 +226,12 @@ return (async () => {
       await sleep(STEP);
       const gotS = storeGet(st.blockId, m.occ, 'startDate'), gotE = storeGet(st.blockId, m.occ, 'endDate');
       const ok = String(gotS) === String(st.start) && String(gotE) === String(st.end === '至今' ? '至今' : st.end);
+      if (!ok && timeExpired()) {
+        budgetExceeded = true;                      // 中途被打断 ≠ 失败：原样续做
+        deferred.push(st);
+        deferred.push(...steps.slice(stepIndex + 1));
+        break;
+      }
       results.push({ ...st, label: m.label, occ: m.occ, ok, note: r.note || r.why, store: { startDate: gotS, endDate: gotE } });
       continue;
     }
@@ -220,7 +264,17 @@ return (async () => {
     const want = String(Array.isArray(st.v) ? st.v.join(',') : st.v);
     const got = typeof after === 'object' && after ? JSON.stringify(after) : String(after);
     const ok = got.indexOf(want) >= 0 || domVal.indexOf(want) >= 0 || got === want || !!st.force;
+    if (!ok && timeExpired()) {
+      budgetExceeded = true;                        // 写入后预算用尽且回读不一致：下一批重设同一值（幂等）
+      deferred.push(st);
+      deferred.push(...steps.slice(stepIndex + 1));
+      break;
+    }
     results.push({ blockId: st.blockId, fid: st.fid, occ: st.occ || 0, label: m.label, type: m.type, v: st.v, ok, note, after, domVal: domVal.slice(0, 40) });
   }
-  return { mode: 'fill', url: location.href, wrote: results.filter(r => r.ok).length, bad: results.filter(r => !r.ok).length, results, requiredErrors: requiredErrors() };
+  return {
+    mode: 'fill', url: location.href, wrote: results.filter(r => r.ok).length,
+    bad: results.filter(r => !r.ok).length, results, deferred, budgetExceeded,
+    elapsedMs: Date.now() - startedAt, requiredErrors: requiredErrors()
+  };
 })();

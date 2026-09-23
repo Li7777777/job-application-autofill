@@ -1,13 +1,11 @@
-// scripts/cdp.mjs —— 用浏览器原生 CDP 端口驱动浏览器（绕开 BrowserOS MCP 的两个硬限制）
+// scripts/cdp.mjs —— browseros-neo MCP 失败时的本机 CDP 备用通道
 //
-// 为什么需要它（实测结论，详见 references/strategies.md §8）：
-//   1) BrowserOS 的 MCP 服务器按「MCP 会话」给标签页发归属凭证。会话一重建（长调用超时、
-//      空闲被清扫），旧页立刻变成 "foreign page" → `page N is not owned by this agent`，
-//      只能 `tabs new` 重开，于是页越堆越多。
-//   2) MCP 的 `Runtime.evaluate` 有 60 秒硬超时（browseros-cdp `request_timeout`），
-//      任何几分钟的批量填充必然被掐断。
-//   而浏览器本身把**原生 CDP** 开在一个本机端口上（默认 9110，见 config.json 的 ports.cdp），
-//   MCP 服务器自己就是走这个端口干活。直连它：**没有归属校验、没有 60 秒上限**。
+// 正常流程优先使用 browseros-neo MCP：tabs / wait / snapshot / act / evaluate / upload。
+// 本文件只在 MCP 无法完成某个动作、页面 ownership 丢失，或受控 file input 的 change 链路失败时使用。
+// 接管时优先用 list 找到 MCP 当前正在使用的同一个 targetId；不要用 open 重开页面。
+//
+// 仍保留 CDP 的优势：它没有 MCP 的页面归属检查，也不受 MCP evaluate 传输超时限制，适合作为
+// 故障恢复通道。长任务应优先拆成 MCP 可续跑短批次；只有确认短批次仍无法完成，才交给 CDP。
 //
 // 依赖：Node 18+（用到全局 fetch），Node 21+（用到全局 WebSocket）。零第三方依赖。
 //
@@ -39,8 +37,10 @@
 //
 // 环境变量：CDP_PORT 覆盖端口；BROWSEROS_CONFIG 覆盖 config.json 路径。
 //
-// 常用套路：把要跑的 JS 写进文件（可长达几千行、跑几分钟），用 eval 一次跑完：
+// MCP 备用接管示例：先由 browseros-neo MCP 完成短批次；只有 MCP 明确失败后，才把同一 targetId 交给本文件：
 //   node cdp.mjs eval 127.0.0.1:8787/... fill.js 900000
+//   node cdp.mjs uploadc <same-targetId> <trigger-expression> <file>
+// 本文件的长 timeout 不是 MCP 的默认策略，而是故障恢复时的最后手段；接管前用 list 确认 targetId。
 // 脚本里用 document.querySelector 正常操作即可；要「真实点击」时改用 click/revalclick。
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';

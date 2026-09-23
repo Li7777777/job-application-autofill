@@ -201,6 +201,24 @@ def main():
               (mp.get(uid_of("出生年月")) or {}).get("granularity") == "month",
               json.dumps(mp.get(uid_of("出生年月")), ensure_ascii=False))
 
+        # 3a) MCP 短批次语义：maxJobs 限制下返回 deferred（不把剩余字段标成 failed），
+        #     主填充随后在同一页续完 —— 这正是 browseros-neo 短调用 + 同页重跑的协议。
+        src_b = open(os.path.join(SCRIPTS, "20_fill.js"), encoding="utf-8").read()
+        src_b = src_b.replace("const MAPPING = {};",
+                              "const MAPPING = " + json.dumps(mp, ensure_ascii=False) + ";", 1)
+        src_b = src_b.replace("maxJobs: 0,", "maxJobs: 2,", 1)
+        f = os.path.join(tmp, "step_fill_budget.js")
+        open(f, "w", encoding="utf-8").write(wrap_body(src_b))
+        fill_b = read_json_out(cdp("eval", target, f, timeout=120)[1])
+        check("短批次预算（maxJobs=2）触发 budgetExceeded", fill_b.get("budgetExceeded") is True,
+              json.dumps({k: fill_b.get(k) for k in ("budgetExceeded", "elapsedMs")}))
+        check("短批次把未处理字段放进 deferred（不记 failed）",
+              len(fill_b.get("deferred") or []) >= 1 and len(fill_b.get("failed") or []) == 0,
+              json.dumps({"deferred": len(fill_b.get("deferred") or []), "failed": len(fill_b.get("failed") or [])}))
+        check("短批次最多处理 maxJobs 个字段",
+              1 <= len(fill_b.get("ok") or []) + len(fill_b.get("skipped") or []) <= 2,
+              str(len(fill_b.get("ok") or [])) + "+" + str(len(fill_b.get("skipped") or [])))
+
         print("\n3) 填充（20_fill.js）")
         src = open(os.path.join(SCRIPTS, "20_fill.js"), encoding="utf-8").read()
         if "const MAPPING = {};" not in src:
@@ -208,6 +226,7 @@ def main():
             return 1
         src = src.replace("const MAPPING = {};",
                           "const MAPPING = " + json.dumps(mp, ensure_ascii=False) + ";", 1)
+        src = src.replace("maxRunMs: 18000", "maxRunMs: 0", 1)   # CDP 备用通道：不限时，一次跑完
         f = os.path.join(tmp, "step_fill.js")
         open(f, "w", encoding="utf-8").write(wrap_body(src))
         rc, out = cdp("eval", target, f, timeout=300)
@@ -216,16 +235,19 @@ def main():
             return 1
         fill = read_json_out(out)
         ok_labels = {x["label"] for x in fill.get("ok", [])}
+        # 3a 的短批次可能已把前两个字段填好 → 主填充按幂等语义记为 skipped；ok∪skipped 都算「已填」
+        filled_labels = ok_labels | {x["label"] for x in fill.get("skipped", [])}
         fail_msgs = {x["label"]: x.get("detail") for x in fill.get("failed", [])}
-        check("填充返回 ok/skipped/failed/suggestions 四组", all(k in fill for k in ("ok", "skipped", "failed", "suggestions")))
-        check("自定义下拉「意向工作城市」填成功", "意向工作城市" in ok_labels, str(fail_msgs.get("意向工作城市")))
-        check("自定义下拉「性别」填成功", "性别" in ok_labels, str(fail_msgs.get("性别")))
+        check("填充返回 ok/skipped/failed/suggestions/deferred 与预算标记",
+              all(k in fill for k in ("ok", "skipped", "failed", "suggestions", "deferred", "budgetExceeded")))
+        check("自定义下拉「意向工作城市」填成功", "意向工作城市" in filled_labels, str(fail_msgs.get("意向工作城市")))
+        check("自定义下拉「性别」填成功", "性别" in filled_labels, str(fail_msgs.get("性别")))
         check("只读日期框（日历年→月→日）填成功", "出生日期 (年龄)" in ok_labels, str(fail_msgs.get("出生日期 (年龄)")))
         edu_ok = [x for x in fill.get("ok", []) if x.get("section") == "教育背景"]
         check("教育背景 6 个字段 + 1 个分片控件全部填成功",
               {"学校名称", "专业名称", "学历", "入学时间"} <= {x["label"] for x in edu_ok} and len(edu_ok) == 7,
               json.dumps([(x["label"], x.get("block")) for x in edu_ok], ensure_ascii=False))
-        check("纯文本字段填成功（姓名 / 推荐码）", {"姓名", "推荐码"} <= ok_labels, str(fail_msgs))
+        check("纯文本字段填成功（姓名 / 推荐码）", {"姓名", "推荐码"} <= filled_labels, str(fail_msgs))
         check("年月粒度自适应：组件只要年月 → 截断到 1999-09（不报错、不编造日）",
               "出生年月" in ok_labels
               and any("1999-09" in str(x.get("detail") or "") for x in fill.get("ok", []) if x.get("label") == "出生年月"),
@@ -292,6 +314,7 @@ def main():
         near_src = re.sub(r"const MAPPING = \{\};",
                           "const MAPPING = " + json.dumps({city_uid: "北京"}, ensure_ascii=False) + ";",
                           open(os.path.join(SCRIPTS, "20_fill.js"), encoding="utf-8").read(), count=1)
+        near_src = near_src.replace("maxRunMs: 18000", "maxRunMs: 0", 1)
         open(os.path.join(tmp, "step_near.js"), "w", encoding="utf-8").write(wrap_body(near_src))
         near = read_json_out(cdp("eval", target, os.path.join(tmp, "step_near.js"))[1])
         near_fail = {x["label"]: x for x in near.get("failed", [])}
@@ -309,6 +332,7 @@ def main():
         src2 = re.sub(r"const MAPPING = \{\};",
                       "const MAPPING = " + json.dumps(mp, ensure_ascii=False) + ";",
                       open(os.path.join(SCRIPTS, "20_fill.js"), encoding="utf-8").read(), count=1)
+        src2 = src2.replace("maxRunMs: 18000", "maxRunMs: 0", 1)
         open(os.path.join(tmp, "step_fill2.js"), "w", encoding="utf-8").write(wrap_body(src2))
         fill2 = read_json_out(cdp("eval", target, os.path.join(tmp, "step_fill2.js"))[1])
         check("幂等：重跑后没有新的写入、全部进 skipped",

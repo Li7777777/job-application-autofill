@@ -1,7 +1,7 @@
 ---
 name: job-application-autofill
 description: 面向简历投递 / 校招网申的自动填表 skill（站点无关）。给定用户提供的招聘网站或申请页链接：扫描表单与必填项（含区块/多段经历/组件框架识别）→ 上传简历触发解析预填 → 用画像与记忆编译字段映射（选项对不上一律只出建议）→ 用站点内置组件（自定义下拉、级联、日期日历、文件上传）自动填入 → 程序化校验后交用户审核；并把「字段名→取值」持续沉淀成可复用的问答记忆、选项对照与站点记忆，下次投递越用越快。内置 antd/ElementUI/ATSX/Moka/北森/Hotjob/飞书 七大 ATS 框架的控件与日历配方。遇到不确定一律问用户、绝不猜测，且**绝不代替用户提交**。当用户要投简历、填网申/校招申请表/报名/登记表/求职申请，或给出 URL 说「帮我填一下」「帮我投」时使用。
-version: 1.2.0
+version: 1.3.0
 metadata:
   verified_sites: "app.mokahr.com（自定义组件重型表单，React16 fiber 直写）、recruit.sinovatio.com（Vue2+Vuetify2，组件 formData 直读）、recruit.inovance.com（react-aria）、wecruit.hotjob.cn（Hotjob）、sokon.zhiye.com / cxmt.zhiye.com / coamc.zhiye.com / zhaopin.chnenergy.com.cn（北森 zhiye 系）、career.honor.com、selenium web-form（原生控件全类型）"
   data_dir: "<运行环境>/data（skill 安装目录下，已 gitignore）；可用 $JAA_DATA_DIR 覆盖"
@@ -14,11 +14,11 @@ metadata:
 面向**简历投递与校招网申**：对任意招聘网站的用户表单做「看清结构 → 上传简历触发解析 → 编译取值 →
 用站点内置组件填入 → 程序校验 → 交用户审核」。站点差异靠 **adapters 文档 + 记忆**吸收，流程与站点无关。
 
-**执行模式（2026-09 定稿）：CDP 快填充 + MCP 复杂交互的混合模式**——CDP（`scripts/cdp.mjs`）负责
-扫描、批量直写、真实点击、上传、状态导出（无 60s 限制、无会话归属问题、输出直落盘）；
-MCP（`browseros-neo`）只做单步交互（tabs 开页、snapshot 看结构、act 点弹层/下拉/键入分片）——
-它有遮挡检测与 diff 回读，对复杂组件成功率最高，但**必须遵守三条红线**（只跑单步原语、
-evaluate ≤ 40s、会话重建后用 CDP 接管而不是重开页），详见 §2 开头的分工表。
+**执行模式（MCP-first）：browseros-neo MCP 主通道 + CDP 显式兜底**——正常流程由 `browseros-neo`
+负责开页、等待渲染、扫描、上传、单步交互和校验；页面脚本只以可续跑的短批次交给
+`browseros-neo_evaluate`。`scripts/cdp.mjs` 仅在 MCP 不能完成某个动作、页面归属丢失或受控文件上传
+确实失败时接管同一标签页，不作为默认执行路径。MCP 的 evaluate 传输上限约 30 秒，脚本默认
+使用约 18 秒业务预算并返回 `deferred`，下一次在同一页继续，详见 §2 开头的分工表。
 
 ## 0. 四条铁律（先读）
 
@@ -43,16 +43,16 @@ evaluate ≤ 40s、会话重建后用 CDP 接管而不是重开页），详见 �
 
 ## 1. 准备（只做一次）
 
-- 工具：`browseros-neo` MCP（tabs/snapshot/act/wait）+ `scripts/cdp.mjs`（CDP 直连）+ 本机 `python`
-- ⚠️ **执行模式：CDP 与 MCP 混合，各管一段**（详见 §2 开头的分工表与三条红线）：
-  - **CDP（`scripts/cdp.mjs`，默认端口 9110）= 快通道**：页面脚本注入（扫描/批量填值/导出状态）、
-    真实点击（clickn/revalclick）、文件选择器拦截上传（uploadc）、聚焦（focus）。
-    无归属校验、无 60 秒上限、输出直落盘。MCP 会话重建后依然可用，是**兑底通道**。
-  - **MCP act = 交互通道**：单步点击/键入/滚动/快照（`tabs/snapshot/act/wait`）。
-    自带遮挡检测与 diff 回读，对「复杂按钮、自定义下拉、级联、搜索树、contenteditable 分片键入」成功率最高。
-  - **MCP 限制（源码级，无配置可改，详见 `references/strategies.md` §8）**：
-    `evaluate` 60 秒硬超时 + 会话回收（一次超 60s 或空闲 30min 即换会话，旧页归属全丢）。
-    `browseros-neo_run` 在本环境不可用（structured output 失败），别试。
+- 工具：**`browseros-neo` MCP（主通道）** + `scripts/cdp.mjs`（备用）+ 本机 `python`
+- ⚠️ **执行模式：MCP 优先，CDP 只兜底**：
+  - **MCP**：`tabs` 开自己的页，`wait` 等渲染，`evaluate` 执行扫描/短批次填充/状态导出，
+    `snapshot`/`act` 处理需要观察页面的下拉、级联、日期、分片键入，`upload` 处理 file input。
+  - **MCP 超时规则**：单次 `evaluate` 的 transport timeout 不超过 25 秒，页面脚本业务预算默认 18 秒；
+    返回 `deferred` 就原页重跑，不要并行开新页或重复填充。
+  - **CDP 备用**：仅用于 MCP 报 ownership 错误、MCP 控件交互连续失败、MCP 上传无法触发 change，
+    或需要接管一个仍在运行的页面任务。用 `cdp.mjs list` 找到同一 targetId 后继续，不重开页。
+  - `browseros-neo_run` 如当前环境仍返回 structured output 错误，使用 granular MCP 原语；不要因为
+    run 不可用就把 CDP 改成主流程。
 - **数据目录**：默认就是本 skill 运行环境自己的 `data/`（即 `scripts/` 的同级目录；
   从仓库直接跑就是 `<repo>/data/`）。首次运行会创建它，并从 `assets/` 播种
   `profile.json` 与运行期 `memory/dictionary.json`；可用 `$JAA_DATA_DIR` 指到别处。
@@ -79,31 +79,33 @@ evaluate ≤ 40s、会话重建后用 CDP 接管而不是重开页），详见 �
 设 `SKILL=<本 skill 的安装目录>`（例如 pi 的 `~/.pi/agent/skills/job-application-autofill`）。
 数据目录默认是 `$SKILL/data/`（也是运行环境），脚本会自动创建。
 
-### ⚡ 执行模式分工（先读：CDP 快填充 + MCP 复杂交互，MCP 永不超限）
+### ⚡ MCP-first 执行分工（单次短调用，超时自动续跑）
 
-| 任务 | 通道 | 命令 |
+| 任务 | 首选通道 | 做法 |
 |---|---|---|
-| 打开表单页 | MCP（拿归属） | `tabs new <url>` |
-| 等待渲染 | MCP | `wait for=text "提交意向"` |
-| 扫描打 uid / 导出状态 | **CDP** | `node scripts/cdp.mjs eval <targetId> scripts/10_scan_form.js > data/runs/<host>-scan.json` |
-| 批量直写（text/textarea/原生 select/隐藏 date input） | **CDP**（一次 eval 几十字段，~秒级） | 生成的批量脚本 + `cdp.mjs eval` |
-| 真实点击（radio/自定义按钮/删除·添加） | **CDP** | `clickn`（元素数组）/ `revalclick`（单元素）|
-| popover 下拉/级联/搜索树/日历 | **MCP act**（开面板→点选项→点外部关） | `act click` → `snapshot/diff` → `act click` |
-| 日期分片键入（contenteditable spinbutton） | **CDP focus + MCP act type**（或纯 CDP `type`） | `cdp.mjs focus <segment>` → MCP `act type "20240901"` |
-| 附件上传（React 受控 file input） | **CDP** `uploadc`（文件选择器拦截） | `node scripts/cdp.mjs uploadc <targetId> <触发元素.js> <file>` |
-| 状态导出/校验 | **CDP** | `cdp.mjs eval 15_dump_state.js` + `30_verify.py` |
+| 打开表单页 | `browseros-neo` MCP | `tabs new <url>`，保存 page id |
+| 等待渲染 | `browseros-neo` MCP | `wait(for="selector", value="form, input, textarea")` |
+| 扫描表单 | `browseros-neo` MCP | `evaluate(10_scan_form.js)`，只读、短调用 |
+| 普通字段填充 | `browseros-neo` MCP | `evaluate(20_fill.js)`，`maxRunMs=18000`；有 `deferred` 就原页续跑 |
+| 需要看结构的下拉/级联/日期 | `browseros-neo` MCP | `snapshot` → `act click/fill/type` → `snapshot/diff` |
+| 日期分片键入 | `browseros-neo` MCP | `act focus/type`；只有 MCP 无法聚焦时才用 CDP `focus` |
+| 文件上传 | `browseros-neo` MCP | 显形真实 file input → `snapshot` → `upload` |
+| 状态导出/校验 | `browseros-neo` MCP | `evaluate(15_dump_state.js)`，再运行本地 `30_verify.py` |
+| MCP 失败后的同页接管 | `scripts/cdp.mjs` | `list` 找原 targetId，再 `eval/click/uploadc`，不 `open` 新页 |
 
-**MCP 三条红线（保证不超 60s / 不丟页面归属）**：
-1. **MCP 只用单步原语**（act/snapshot/wait/tabs），**永不跑页面脚本**——脚本一律走 CDP eval；
-   确需 MCP evaluate 时单次 ≤ 40 秒（留 20s 余量）。
-2. **连续操作**：MCP 调用间隔不超 30 分钟（长批处理交给 CDP，MCP 只做短交互）。
-3. **CDP 兑底**：MCP 会话一旦重建（报 `page N is not owned by this agent`），不重开页面——
-   改用 `node scripts/cdp.mjs eval/click/revalclick <targetId> ...` 接管同一页继续干，
-   需要交互快照时再用 `tabs new` 重开新页（并立即用 CDP 把已填状态重放到新页）。
+**MCP 超时与续跑规则：**
+1. 单次 MCP `evaluate` 的调用 timeout ≤25 秒；页面脚本默认 `maxRunMs=18000`，不要把一整个长表单
+   塞进一次调用。`20_fill.js` 返回 `deferred` 时，使用相同 mapping 在同一 page 再调用；它会跳过已写回
+   的字段，继续处理剩余字段。
+2. `probeOptions` 默认使用约 16 秒预算，并按组写入 localStorage 缓存；探测返回部分结果时原页重跑，
+   不重复开新标签页。
+3. 看到 timeout 不要立刻重跑填充：先用 MCP 做只读 `15_dump_state.js` 或小型回读，确认页面是否已
+   完成。若 page ownership 丢失，再用 CDP `list` 找同一 targetId 继续；不要用 CDP `open` 重开页面。
+4. MCP 调用之间不要空置超过会话保活窗口；需要等待页面时使用 `wait(for="selector")`，不要在
+   `evaluate` 里写长 `sleep`。后台页可能冻结 timer；开始交互前先用 MCP 将页面置于可见状态。
 
-> targetId 获取：`node scripts/cdp.mjs list`（按 URL 片段找）；
-> 页面长、sticky 底栏会盖住内容 → 交互前先 `scrollIntoView({block:'center'})`（CDP eval 或 act scroll），
-> 否则 MCP act 会报 `covered by header.fixed/div.absolute` 拒绝点击（这是保护，不是故障）。
+> 页面长、sticky 底栏会盖住内容 → 交互前先用 `act scroll` 让目标居中；否则 MCP act 可能报告
+> `covered by header.fixed/div.absolute`。这是保护，不是故障。
 
 ### ① 拿到网站并确认范围
 用户给 URL。若用户没给，就问：
@@ -113,11 +115,12 @@ evaluate ≤ 40s、会话重建后用 CDP 接管而不是重开页），详见 �
 > 别自己假设「大概是求职网申」。
 
 ### ② 打开并扫描
-```bash
-browseros-neo_tabs new <url>                      # MCP 开页拿归属；等表单渲染（wait for=text 关键区块名）
-node $SKILL/scripts/cdp.mjs list                 # 拿 targetId
-# CDP 注入扫描器（输出直落盘，无 5000 字符截断；几秒完成）
-node $SKILL/scripts/cdp.mjs eval <targetId> $SKILL/scripts/10_scan_form.js > data/runs/<host>-scan.json
+```text
+browseros-neo_tabs new <url>                         # MCP 主通道：开自己的页并保存 page id
+browseros-neo_wait(for="selector", value="form, input, textarea")
+browseros-neo_snapshot(mode="interactive")              # 读结构，拿可操作 refs
+browseros-neo_evaluate(page=<id>, <scripts/10_scan_form.js>, timeout=25000)
+# 将 evaluate 返回的 JSON 保存到 data/runs/<host>-scan.json；输出很大时按 section 分段回读
 ```
 扫描结果含：`uid / kind / label / labelNorm / labels[] / required / requiredConfidence / options`，
 以及 **`section`（区块）/ `block`（重复块序号）/ `framework`（组件框架）/ `filled`**，
@@ -127,7 +130,7 @@ node $SKILL/scripts/cdp.mjs eval <targetId> $SKILL/scripts/10_scan_form.js > dat
 > 这正是后面能把画像第 1/2 条分别填对的关键。
 > ⚠️ **uid 生命周期**：页面重渲染/加删块后旧 uid 会丢失或漂移，结构一变就重扫；
 > 同 uid 双元素会让 querySelector 静默错位（`10_scan_form.js` 开头会清旧标，但重渲染仍可能产生新节点）——
-> 填完一区块后用 CDP 读值回验，不信 a11y 树瞬时状态。
+> 填完一区块后用 MCP `evaluate(15_dump_state.js)` 或 `snapshot` 回读；不要把瞬时 a11y 树当成唯一事实。
 
 > **🚀 默认策略：先试快路径，失败再回退通用方案。**
 > `scripts/25_mokahr_fiber.js`（组件 API 直写）对**任何表单**都可以先试——
@@ -138,6 +141,8 @@ node $SKILL/scripts/cdp.mjs eval <targetId> $SKILL/scripts/10_scan_form.js > dat
 > - **dump 出 `nFields = 0` 或异常** → 站点没有暴露字段组件 API（Vue/原生表单/服务端渲染），
 >   **回退到上面的通用八步**（DOM 扫描 + 面板交互）。
 > 快路径的取值形状与配方见 `references/adapters/mokahr.md`《React16 组件 API 直写》一节。
+> `fill` 也遵守 18 秒业务预算：若返回 `deferred`，下一次只把该数组传回 `CONFIG.steps`；
+> **不能重放原始 add/delLast 步骤**，否则会重复增删记录。
 > 回退判据（满足其一即回退，**不要反复重试快路径**）：dump 返回 `nFields=0`；fill 连续 2 步以上
 > 「字段不在模型」；同一字段写入后 `store` 回读始终为空。回退后把该站记进
 > `references/adapters/<host>.md`（「无组件 API，走通用方案」），下次不再浪费时间试。
@@ -163,8 +168,9 @@ python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json
 // 把 scripts/20_fill.js 顶部的 MAPPING 留空，改成：
 const OPTS = { probeOptions: true };
 ```
-```bash
-node $SKILL/scripts/cdp.mjs eval <targetId> <改好的 20_fill.js> > data/runs/<host>-probe.json
+```text
+browseros-neo_evaluate(page=<id>, <20_fill.js with OPTS.probeOptions=true and MAPPING empty>, timeout=25000)
+# 预算用尽时返回部分 probed；用相同页面再次 evaluate，localStorage 会复用已探测分组
 ```
 ```bash
 python $SKILL/scripts/90_memory.py record-probe --host <host> \
@@ -199,9 +205,11 @@ python $SKILL/scripts/90_memory.py add-option --host <host> \
 python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --answers '{"f15":"高频：…"}'
 ```
 
-### ⑤ 上传附件（若表单要简历/证件）
-React 受控的 `input[type=file]`（现令大多数站）**不能**直接 `DOM.setFileInputFiles`——不触发 change、
-且 React 在下一帧重置 input，文件静默丢失。一律走**文件选择器拦截**（真实用户链路）：
+### ⑤ 上传附件（优先 browseros-neo_upload）
+React 受控的 `input[type=file]` 默认先用 MCP 上传：先通过 `evaluate` 给真实 file input 加可读的
+`aria-label` 并滚动到视口，再 `snapshot(mode="interactive")` 找到 file input ref，调用
+`browseros-neo_upload`。如果 MCP 明确报 `Node is not a file input element`、change 没有进入页面状态，
+才使用 CDP `uploadc` 作为备用，并在上传后用 MCP `snapshot/evaluate` 回读文件名。
 ```bash
 # 1) 写触发元素表达式（返回「点击上传」那个 span/button；自动 scrollIntoView）
 #    例：(() => [...document.querySelectorAll('span')].find(e => e.textContent.trim()==='点击上传'))()
@@ -209,36 +217,22 @@ node $SKILL/scripts/cdp.mjs uploadc <targetId> <触发元素.js> "<本机简历�
 ```
 > 拦截模式自动：Page.setInterceptFileChooserDialog → 真实点击触发元素 → 等 fileChooserOpened →
 > DOM.setFileInputFiles({backendNodeId}) → 浏览器走原生 change → React onChange 收到。
-> 回读验证：CDP eval 读附件区文本是否出现文件名。
+> 回读验证：优先用 MCP `snapshot`/`evaluate` 读附件区文本确认文件名出现；CDP 仅在备用接管时使用。
 
-### ⑥ 自动填入（混合循环：CDP 批量 + MCP 交互）
-按字段类型分派到正确的通道，**每一步都是短操作，MCP 永不接近 60s 上限**：
+### ⑥ 自动填入（MCP 短批次 + act 交互）
+按字段类型分派：能幂等续跑的页面脚本走 `evaluate`，需要看页面结构的控件走 `act`，每一步都是短操作：
 
-```bash
-# ── A. CDP 批量直写（一次 eval 几十字段，秒级）：
-#    文本/textarea（native setter + input/change）、原生 <select>（selectedOptions 对号入座）、
-#    隐藏的原生 <input type=date>（直写后分片显示自动联动）
-node $SKILL/scripts/cdp.mjs eval <targetId> data/runs/_fill_batch.js
-
-# ── B. CDP 真实点击（radio / 自定义按钮 / 添加·删除块；合成 click() 不进 React store，必须真实点击）
-node $SKILL/scripts/cdp.mjs clickn <targetId> data/runs/_radios.json 500      # 元素数组逐个点
-node $SKILL/scripts/cdp.mjs revalclick <targetId> data/runs/_one_btn.js 600   # 单元素
-
-# ── C. MCP act 交互（popover 下拉/级联/搜索树/日历——MCP 的遮挡检测与 diff 回读在这里最有价值）
-#    开面板：act click <触发器 ref>（先 CDP scrollIntoView 或 act scroll 避开遮挡）
-#    选选项：snapshot/diff 拿 ref → act click；树/级联逐级点
-#    关面板：点面板外空白（click_at）；Esc 和「取消」常被 fixed header 遮挡，别依赖
-
-# ── D. 日期分片（contenteditable spinbutton）：CDP 聚焦 + 真实键入
-node $SKILL/scripts/cdp.mjs focus <targetId> data/runs/_seg_f9.js   # focus 年段
-#   然后 MCP act type "20240901"（8 位连输，逐段自动流转；月/日段同理）
-#   也可纯 CDP：node scripts/cdp.mjs type <targetId> <seg.js> <text.txt>（已支持 contenteditable）
+```text
+# MCP 路径：evaluate(20_fill.js, maxRunMs=18000, timeout=25000)
+# 返回 deferred 时，用相同 mapping 在同一 page 重跑；已填字段会被幂等跳过。
+# 普通自定义下拉/级联/日历：snapshot → act click → snapshot/diff → act click
+# contenteditable 日期分片：MCP act focus/type，逐段小步回读
+# 只有以上路径明确失败，才用 scripts/cdp.mjs 接管同一 targetId：
+#   cdp.mjs eval/click/revalclick/focus/uploadc <targetId> ...
 ```
 
-CDP 批量脚本的生成方式：把 `mapping.json` 按「控件类型」分派——文本类用 native setter 链
-（`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set` + `dispatchEvent('input'/'change')`），
-写完**逐字段回读**（`value === 目标值 ? 'OK' : 'MISMATCH'`）并把结果留在 stdout 里。
-返回 `{failed, bad}` 必须逐条解释；`skipped` = 已是目标值（幂等可重跑）。
+MCP 填充脚本按字段逐个回读，返回 `{failed, suggestions, deferred}` 必须逐条解释；
+`deferred` 表示时间预算到达，不表示失败。重复执行相同 mapping 是安全的：`skipped` 表示已经是目标值。
 
 MAPPING 的值可以是字符串，也可以是带指令的对象：
 ```js
@@ -257,8 +251,9 @@ MAPPING 的值可以是字符串，也可以是带指令的对象：
 > 详见 `references/component-recipes.md §3`。
 
 ### ⑦ 程序校验 + 交给用户审核
-```bash
-node $SKILL/scripts/cdp.mjs eval <targetId> $SKILL/scripts/15_dump_state.js > data/runs/<host>-state.json
+```text
+browseros-neo_evaluate(page=<id>, <scripts/15_dump_state.js>, timeout=25000)
+# 把返回 JSON 保存到 data/runs/<host>-state.json，再在本地运行：
 python $SKILL/scripts/30_verify.py --state data/runs/<host>-state.json \
     --mapping data/runs/<host>-mapping.json --scan data/runs/<host>-scan.json
 ```
@@ -299,12 +294,12 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 |------|--------|------|
 | `scripts/10_scan_form.js` | 页面 (evaluate) | 通用扫描：控件/字段名候选/**归一化字段名**/必填判定/选项 + **区块 section**、**重复块 block**、**组件框架 framework**；打 `data-jaa-*` 标记 |
 | `scripts/15_dump_state.js` | 页面 (evaluate) | 导出当前已填状态（值/必填/报错/附件/区块/块/框架） |
-| `scripts/20_fill.js` | 页面 (evaluate) | 通用填充：React/Vue 原生 setter + 模拟输入 + contenteditable + 七大框架下拉/级联 + 日期日历引擎 + 年月分片 + **选项只读探测（probeOptions）**；**带提交按钮拦截** |
-| `scripts/25_mokahr_fiber.js` | 页面 (evaluate) | **组件 API 快路径（默认首选，任何站先试）**：沿 `__reactInternalInstance$`/`__reactFiber$` 找字段组件的 `fieldInfo/_get_/_set_`，读选项/写值**零开面板**；`dump`（3 秒判「该站可不可走快路径」）/`fill`（set·daterow·add·delLast）/`store`（整表校验）三模式；不可达时回退通用方案；含提交拦截与选项闸门 |
+| `scripts/20_fill.js` | 页面 (MCP evaluate) | 通用填充：React/Vue 原生 setter + 模拟输入 + contenteditable + 七大框架下拉/级联 + 日期日历引擎 + 年月分片 + **选项只读探测**；默认 18s 业务预算，返回 `deferred` 后同页重跑；**带提交按钮拦截** |
+| `scripts/25_mokahr_fiber.js` | 页面 (MCP evaluate) | **组件 API 快路径（默认首选，任何站先试）**：`dump/fill/store` 三模式；默认 18s 预算，返回 `deferred` 后只把该数组作为下一次 `CONFIG.steps`（避免重放 add/delLast）；不可达时回退通用方案；含提交拦截与选项闸门 |
 | `scripts/30_verify.py` | 本地 | 状态 vs 画像/字典 校验（格式/一致性/完整性/**选项闸门**/未映射，按区块分段） |
 | `scripts/40_build_mapping.py` | 本地 | 编译 uid→值 的映射 + 待问用户清单；**多段经历按 (区块,块) 定记录序号**；**选项对不上就阻塞不猜** |
 | `scripts/90_memory.py` | 本地 | 站点记忆 / 问答记忆 / 别名 / **选项对照 `add-option`** / **选项目录 `record-probe`** / 运行日志 |
-| `scripts/cdp.mjs` | 本地（Node 18+） | **CDP 直连快通道（默认 127.0.0.1:9110）**：`eval`（脚本注入/批量填值/状态导出，无 60s 限制）、`click/revalclick/clickn/seq`（真实鼠标点击）、`type`（真实键盘，支持 contenteditable 分片）、`focus`（定位聚焦任意元素）、`uploadc`（文件选择器拦截上传）、`upload`（旧式直设）、`port/list/open/close/wake/front/shot`；无归属校验——**主填充通道 + MCP 失效后的兑底** |
+| `scripts/cdp.mjs` | 本地（Node 18+） | **CDP 备用接管通道（默认 127.0.0.1:9110）**：MCP ownership 丢失、真实交互连续失败或受控上传失败时，通过 `list` 找同一 targetId，再用 `eval/click/type/focus/uploadc` 恢复；正常流程禁止用 `open` 另起页面。 |
 | `scripts/jaa_lib.py` | 本地 | 共用：字典匹配、**标签归一化 `norm_label`**、画像取值、**选项打分 `score_option/rank_options/best_option`**、**占位符过滤 `is_placeholder`**、格式校验、**泄漏守卫 `sensitive_tokens/leak_scan/redact_text`**（拿画像取值当黑名单扫可发布文件） |
 | `scripts/95_lint_notes.py` | 本地 | **沉淀守卫**：可发布文件（排除 gitignore 的 `data/`）里的个人数据检查 / `--fix` 一键脱敏 / `--list-tokens` 看黑名单 / `--paths` 只查指定文件；`jaa-leak-allow` 标记可豁免「站点公开选项表」这类行 |
 | `dev/check_js.js` | 本地（Node） | 开发自检：把三个页面脚本按 evaluate 的「函数体」形状解析一遍 |
@@ -316,7 +311,7 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 | `assets/profile.template.json` | 画像模板（首次运行拷成 `data/profile.json`） |
 | **`assets/platform-selectors.json`** | **七大 ATS 框架的 detect / 下拉选项容器 / 日期预设 / 弹层黑名单**（权威副本） |
 | **`references/component-recipes.md`** | 上面那份配置的说明书：开→采→配→点→回读、日历引擎、三级定位、框架注意事项 |
-| `references/strategies.md` | 通用启发式 + MCP/CDP 工具技巧 + 校验判定 |
+| `references/strategies.md` | 通用启发式 + MCP-first 工具技巧 + 超时/续跑与 CDP 兜底判定 |
 | `references/adapters/<host>.md` | 单站点适配笔记（选择器、坑、顺序要求） |
 
 ## 4. 支持度与边界（诚实说明）
@@ -347,28 +342,28 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 
 | 坑 | 现象 | 处理 |
 |---|---|---|
-| 标签页归属 | `page N is not owned by this agent` | 一律 `tabs new` 自己的页（cookie 共享，登录态复用）。**但根因是 MCP 会话被换掉**：单次 `evaluate` 超过 60 秒、或长时间空闲都会触发；长任务改用 `scripts/cdp.mjs`（见 §8） |
+| 标签页归属 | `page N is not owned by this agent` | 先用 MCP `tabs new` 开自己的页；若会话重建导致归属丢失，用 `cdp.mjs list` 找同一 targetId 接管，不重开页面。 |
 | evaluate 代码形状 | 返回 `undefined` | 代码按“函数体”执行，脚本必须**顶层 `return`**；别包成没 return 的 IIFE |
 | 输出截断 | 结果只到 5000 字符 | 完整结果在 `.browseros/tool-output/evaluate-*.txt` |
-| `browseros-neo_run` 不可用 | `did not return structured output` | 用 `evaluate`；要跑几分钟就用 `scripts/cdp.mjs eval <targetId> <脚本文件>` |
-| 批量填充跑到一半就断 | `CDP request timed out: Runtime.evaluate`（约 60 秒） | 单次 `evaluate` ≤ 40 秒；整段的批量任务改走 `scripts/cdp.mjs`（无超时），中途把进度写进 `localStorage` 便于续做 |
-| 标签页越开越多且关不掉 | 每次会话重建只能 `tabs new`，旧页归属已死会话 | 用 `scripts/cdp.mjs open` 只开**一个**页；残留页请用户手动关（或重启浏览器） |
+| `browseros-neo_run` 不可用 | `did not return structured output` | 继续使用 granular MCP 原语和 `evaluate`；不要因此切换 CDP 主流程。 |
+| 批量填充接近超时 | `evaluate` 运行时间变长或返回 timeout | 默认 `timeout≤25s`、脚本 `maxRunMs=18s`；收到 `deferred` 在同一页重跑。timeout 后先只读回读，再决定是否续跑；仅 ownership 丢失才用 CDP 接管。 |
+| 标签页越开越多且关不掉 | 会话重建后出现旧页 | MCP 续跑必须复用原 page；需要 CDP 兜底时只 `list`/接管原 targetId，禁止 `cdp.mjs open` 新页。 |
 | 静态草稿 | 有的站不存草稿、有的异步存 | 每步落盘；重进页面后重跑扫描+填充（幂等） |
 | 自定义组件取不到值 | `input.value` 是空 | 值在显示层：`readDisplay` 按框架 `display_value_selector` → `[class*=display-value]` → 最近 label 文本依次兜底 |
 | 弹层里点错了 | 同一页有多个已渲染的隐藏下拉 / tooltip / 日历面板 | 面板取「离触发元素最近的**可见**弹层」，并用 `isNonPanel` 黑名单排除 tooltip/日期面板；选项只取叶子 |
-| 合成 `el.click()` 没反应 | React 代理事件不认 | `clickReal()` 发 `pointerdown→mousedown→mouseup→click`（带坐标）；仍不行走 `scripts/cdp.mjs click`，或直接调 `__reactFiber` 上的 `onClick`（`strategies.md` §8.4） |
+| 合成 `el.click()` 没反应 | React 代理事件不认 | 先用 MCP `act` 真实点击并通过 `snapshot/diff` 回读；仍失败才走 `cdp.mjs click`，或直接调 `__reactFiber` 上的 `onClick`（`strategies.md` §8.4） |
 | 选项文本对不上 | 「北京」vs「北京市」 | 归一化相等（0.98）才自动点；包含（0.5–0.8）与中文缩写（0.45）**只进 suggestions**；用 `add-option` 记下对照后下次直接命中 |
 | 多段经历填串了 | 两段「学校名称」抢同一条画像 | 扫描器给 `block` 0/1…，编译器按 `(区块, 块)` 定记录序号；若 `summary.multiBlock = 0` 说明没识别出重复块 → 补 `layout.group_class` |
 | 必填判定 | 星号在字段块里，不在控件上 | 扫描器做「字段块 + 星号/必填字样 + 框架信号（`.ant-form-item-required` / `.el-form-item.is-required`）」三级判定，标注 `requiredConfidence`；medium/low 一律列进 todo 让人工确认 |
 | 字段名带噪声 | 「毕业时间（必填）」匹配不上字典 | 扫描器同时给 `label`（给人看）与 `labelNorm`（去噪声）；字典/记忆一律走 `labelNorm` |
-| 合成 click 假成功（radio/React 受控组件） | `r.click()` 后 `checked=true`、回读也有值，**但没进 React store**——页面一重渲染勾选就丢 | radio/开关一律真实点击（`cdp.mjs revalclick/clickn`）；填完后再做一次「重渲染后回读」（如删加块/翻页）验证状态仍在 |
+| 合成 click 假成功（radio/React 受控组件） | `r.click()` 后 `checked=true`、回读也有值，**但没进 React store**——页面一重渲染勾选就丢 | radio/开关优先用 MCP `act` 真实点击；MCP 明确失败才用 `cdp.mjs revalclick/clickn`；填完后再做一次重渲染后回读。 |
 | uid 漂移/丢失 | 加删块、翻区块后旧 `[data-jaa-uid]` 找不到，或同 uid 出现双元素 | 结构一变就重扫；填充脚本写完立即回读（`value === 目标值 ? OK : MISMATCH`）；定位优先用 aria-label/placeholder 等结构属性，uid 只作短生命周期句柄 |
 | 找按钮误点其他区块 | 「找『+ 添加一项』向上爬容器」会爬到区块共享祖先，点到**别的区块**的添加按钮（实测误加 2 个教育块） | 按钮查找限定在目标区块容器内（`h2 → closest(区块容器)` 的后代），爬层上限 ≤8 且逐层校验容器归属 |
-| MCP act 报 covered | `Element is covered by header.fixed / div.absolute`（sticky 底栏、日期组透明覆盖层盖住目标） | 这是**保护不是故障**：先 `scrollIntoView({block:'center'})`（CDP eval 或 act scroll）再 act；被日期组覆盖层盖住的分片改走 `focus + type` 键入 |
+| MCP act 报 covered | `Element is covered by header.fixed / div.absolute`（sticky 底栏、日期组透明覆盖层盖住目标） | 这是保护不是故障：先用 MCP `act scroll` 让目标居中，再重试；只有 MCP 仍不能操作时才用 CDP。 |
 | 弹层关不掉 | Esc 派发无效；「取消」按钮被 fixed header 遮挡点不到 | 点面板外空白坐标（`act click_at` 视口空白处）；弹层内出现「清空」按钮 = 已选中的可靠信号 |
 | 搜索框 fill 追加不替换 | act fill 后值变成「旧+新」拼接 | 再 fill 一次带 `clear:true`；或 click → Ctrl+A → type |
-| 附件上传静默丢 | `DOM.setFileInputFiles` 后 `input.files` 下一帧变空（React 重置），页面无文件名 | 用 `cdp.mjs uploadc`（文件选择器拦截模式，真实 change 链路）；回读附件区文本确认文件名出现 |
-| a11y 树/diff 显示延迟 | 触发器已选中，snapshot 里仍显示「请选择…」 | 验证以 CDP 读 DOM/store 为准，不信瞬时 a11y 文本 |
+| 附件上传静默丢 | MCP upload 后页面没有文件名/change 状态 | 先确认 ref 是真实 `input[type=file]`；MCP 明确失败后才用 `cdp.mjs uploadc`，再用 MCP 回读附件区文本。 |
+| a11y 树/diff 显示延迟 | 触发器已选中，snapshot 里仍显示「请选择…」 | 先用 MCP `evaluate(15_dump_state.js)` 做结构化回读；必要时再让 CDP 读取 store，不信瞬时文本。 |
 | 后台页定时器冻结 | 含 `await sleep()` 的 eval 永久挂起，伪装成超时 | 先 `node scripts/cdp.mjs front <id>`（详见 strategies.md §8.7） |
 | **笔记夹带个人数据** | adapter 笔记 / 配方 / 示例里写了真实姓名、手机、生日、籍贯、院校、专业、简历文件名、本机路径 → **会随仓库发布出去** | 真实值只写 `data/`；笔记里用占位符；写完跑 `python scripts/95_lint_notes.py`（`--fix` 一键脱敏）；公开的站点选项表可加 `jaa-leak-allow` 豁免；详见 §0 铁律 4 |
 

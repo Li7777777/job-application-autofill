@@ -4,7 +4,8 @@
 **无组件 API**（不是 React/Vue 表单）→ `25_mokahr_fiber.js` 的 dump 必为 0，**直接走通用方案**，不要浪费时间试快路径。
 
 **最大优势**：所有控件都有稳定的 `name` 属性（`fullName` / `nation` / `nativPlace1` / `schoolName` / `school` …），
-**不需要扫描器打 uid**，直接 `$('[name=x]').val(v).trigger('change')` 即可。填充走 CDP（`cdp.mjs eval`）。
+**不需要扫描器打 uid**，可在 browseros-neo MCP 的短 `evaluate` 中按稳定 `name` 写值：
+`$('[name=x]').val(v).trigger('change')`。每页独立短批次；只有 ownership 丢失时才用 `cdp.mjs eval` 接管。
 
 ## 页面结构（我的简历 = 11 个子页，每个都是独立 URL，不是懒加载 tab）
 

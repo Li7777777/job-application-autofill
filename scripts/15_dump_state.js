@@ -1,5 +1,6 @@
 // scripts/15_dump_state.js —— 通用状态导出（依赖 10_scan_form.js 打的 data-jaa-* 标记）
-// 用法：填完后整段粘进 browseros-neo_evaluate(page=<id>)；结果为 JSON，存 data/runs/<host>-state.json
+// 用法：优先通过 browseros-neo_evaluate(page=<id>, timeout≤25000) 短调用执行；结果为 JSON，存 data/runs/<host>-state.json
+// CDP 只在 MCP ownership 丢失或短回读失败时备用接管，完成后仍回到 MCP 校验。
 // 导出：值 / 必填 / 页面报错 / 附件 / 区块 / 重复块序号 / 组件框架 —— 供 30_verify.py 逐项对账
 // ⚠️ 必须以 **顶层 return** 结束。
 

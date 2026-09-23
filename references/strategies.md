@@ -102,21 +102,11 @@ inp.click();
 > 而「申请信息」这种同区块里另一个字段是必填时，会给同区块的选填字段带来**误判**
 > （实测「推荐码」被误判为必填）→ 所以 medium 一律进 todo 让人确认，不要直接信。
 
-## 3. 文件上传（`<input type=file>` 不在无障碍树里）
+## 3. 文件上传（优先 browseros-neo_upload，CDP 备用）
 
-**首选（2026-09 定稿）：文件选择器拦截，一步到位**——对 React 受控 file input 也可靠：
-
-```bash
-# 触发元素表达式文件（返回「点击上传」那个 span/button）：
-#   (() => [...document.querySelectorAll('span')].find(e => e.textContent.trim()==='点击上传'))()
-node scripts/cdp.mjs uploadc <targetId> <触发元素.js> "<本机简历绝对路径>.pdf"
-```
-> 拦截模式：`Page.setInterceptFileChooserDialog(true)` → 真实点击触发元素 → 等 `Page.fileChooserOpened`
-> → `DOM.setFileInputFiles({backendNodeId})` → 浏览器走**原生 change** → React onChange 收到。
-> 回读验证：CDP eval 读附件区文本是否出现文件名。
->
-> ⚠️ **不要用 `DOM.setFileInputFiles` 直接设 input**（`cdp.mjs upload` 旧命令）：不触发 change，
-> 且 React 受控组件在下一帧重置 input —— 文件静默丢失（汇川实测）。
+**首选：MCP file input 上传**——先用 MCP `evaluate` 给真实 `input[type=file]` 加可读的
+`aria-label`、`tabindex` 并滚动到视口，然后 `snapshot(mode="interactive")` 找到真实 file input，
+调用 `browseros-neo_upload`。上传后用 `snapshot` 或短 `evaluate` 回读附件区文件名。
 
 备选（老站 / MCP 侧、file input 非受控时）：
 
@@ -132,8 +122,9 @@ inp.scrollIntoView({block:'center'});
 第二步：browseros-neo_snapshot(mode=interactive) → 找 button "RESUME_FILE_INPUT" [ref=eN]
 第三步：browseros-neo_upload(page, ref="eN", file="<简历文件的绝对路径>")
 ```
-- 对「上传」按钮的 ref 调 upload 会报 `Node is not a file input element`；
-- **不要真的点击上传按钮**（弹系统文件框，自动化会卡住；除非用了 uploadc 的拦截模式）；
+- MCP 上传必须使用真实 file input 的 ref；对「上传」按钮 ref 调 `upload` 会报 `Node is not a file input element`。
+- 不要点击会弹系统文件框的普通上传按钮；先找真实 `input[type=file]`。MCP 明确无法触发 change 时，
+  才用 CDP `uploadc` 拦截文件选择器，并用 MCP 回读页面状态。
 - 中文路径先复制到 ASCII 安全目录（`%TEMP%\\wfa\\`）；文件名保留中文没问题（HR 会看到）。
 
 ## 4. 工具技巧
@@ -155,13 +146,13 @@ obj = json.loads(raw[raw.index('{"url"'):raw.rindex('}')+1])   # 按自己的 JS
 
 - 用户自己的标签页不属于 agent：`snapshot/evaluate` 有时能读，但 `upload/download` 会报
   `page N is not owned by this agent` → **统一 `tabs new` 开自己的页**（同窗口共享 cookie，登录态直接复用）。
-- 会话/工具会话可能被重建，`page id` 会失效 → 失效就重新 `tabs new` + 重新扫描（脚本幂等，代价很小）。
+- 会话/工具会话可能被重建。先用 MCP 在原 page 续跑；若 page ownership 丢失，用 `scripts/cdp.mjs list`
+  找同一 targetId 接管，不要用 CDP `open` 重开页面。
 - 用 `name_session` 给会话取名（如 `form autofill`），便于多任务并存。
-- ⚠️ **后台标签页的定时器会被冻结**：`eval` 里含 `await sleep()` 的脚本会**永久挂起**（看起来像 CDP 超时）。
-  跑异步脚本前先 `node scripts/cdp.mjs front <id>`；详见 §8.7。
-- ⚠️ **重建是常态，不是偶发**：只要一次 `evaluate` 超过 60 秒，或前后两次调用间隔久了，
-  MCP 侧就会换一个新会话，**之前开的页全部作废**（改名也认不回来，归属认的是会话 id）。
-  机制、证据和绕过方法见 §8 —— 长任务请直接走 CDP，不要用 MCP 硬扛。
+- MCP 页面操作之间不要长时间空置；等待渲染用 `browseros-neo_wait(for="selector")`，不要在
+  `evaluate` 里写长 `sleep`。后台标签页可能冻结定时器，交互前先用 MCP 保证页面可见。
+- 单次 MCP `evaluate` 的 transport timeout ≤25 秒；页面脚本默认 `maxRunMs=18000`。返回 `deferred`
+  就在同一 page 重跑；不要把 timeout 当成失败，也不要立刻重复写入。
 
 ### 8.7 后台标签页会**冻结定时器** —— 含 `await sleep()` 的脚本会永久挂起（必看）
 
@@ -215,17 +206,24 @@ const assertSafe = el => !(el.tagName === 'BUTTON' || (el.getAttribute('type')||
   自定义下拉的选项靠 `OPTS.probeOptions=true` 先探测，或用 `--probe` 合并探测结果。
 - 必填：以扫描的 `required` 为准，但 medium/low 的可信度要在报告里标出来。
 
-## 8. 长任务：绕开 MCP，直连浏览器原生 CDP（重要）
+## 8. CDP 备用通道（MCP 优先，明确失败后才接管）
 
-### 8.1 症状（如果你看到这些，就是撞上了 MCP 的两个硬限制）
+MCP 是默认执行路径。下面的 CDP 说明只用于 MCP 无法继续时的故障恢复：先保留同一页面和状态，
+再通过本机 CDP 找到同一 targetId 接管；不要为了追求速度主动跳过 MCP。
 
-| 症状 | 真实原因 |
+### 8.1 何时启用备用通道
+
+| 现象 | 处理 |
 |---|---|
-| 填到一半 `page N is not owned by this agent; call tabs new …` | MCP 会话被换掉，旧页归属失效 |
-| 同一个页反复开，标签页越堆越多、关不掉 | 每次换会话只能 `tabs new`；旧页归属已死会话，当前会话无权关闭 |
-| `evaluate` 报 `CDP request timed out: Runtime.evaluate`（约 60 秒） | 浏览器侧 CDP 桥的**请求超时是 60 秒**（写死的） |
-| 后台长任务跑一半停住、`localStorage` 里的进度不再更新 | 上一次 `evaluate` 被超时掐断，页面里的 async 任务也被回收 |
-| `browseros-neo_run` 永远 `did not return structured output` | 该工具在本环境不可用，别试了 |
+| 普通字段、扫描、校验可以由 MCP `evaluate` 在 25 秒内完成 | 继续使用 MCP，不启用 CDP |
+| `20_fill.js` 返回 `deferred` | 在同一 page 用相同 mapping 重跑，依靠幂等跳过已完成字段 |
+| MCP 报 `page N is not owned by this agent` | 用 `cdp.mjs list` 找原 targetId，接管同一页，不 `open` |
+| MCP 对某控件连续真实点击/键入失败 | 先 `snapshot/diff` 复核状态；仍失败再用 CDP 真实输入 |
+| MCP `upload` 对真实 file input 仍未触发 change | 用 CDP `uploadc`，再用 MCP 回读 |
+| 页面确实需要超过多个 MCP 短批次且无法安全拆分 | 记录原因后才用 CDP `eval`，完成后回到 MCP 校验 |
+
+遇到 MCP timeout 时，第一动作是 MCP 只读回读 `15_dump_state.js` 或小型状态查询。页面任务可能已
+完成一部分；确认状态后再续跑，避免重复添加经历块或反复覆盖字段。
 
 ### 8.2 机制（来自源码，不是猜的）
 
@@ -241,10 +239,10 @@ BrowserOS neo 的 MCP 后端是开源的 Rust 服务（`browseros-ai/BrowserOS` 
   （`crates/browseros-core/src/timeouts.rs` 里也留了个 `CDP_REQUEST_TIMEOUT`），**没有环境变量/配置项**。
 - 唯一那个用户可改的 flag（`flags.allow_remote_in_mcp`）只管「允不允许非本机客户端连 MCP」，与归属/超时无关。
 
-> 设计意图没错：一个浏览器被多个 agent 共用，还要能按会话回放，所以必须按会话发凭证、且不抢用户的页。
-> 但它对「一次性干几分钟的填表任务」太苛刻。
+> 这些限制说明为什么要做短批次和同页接管，不是把 CDP 设为默认。普通扫描、字段填充和校验应先走 MCP；
+> 只有短批次仍不能完成时，才使用下面的 CDP fallback。
 
-### 8.3 破解：浏览器把**原生 CDP** 开在本机端口上
+### 8.3 备用通道：通过浏览器原生 CDP 接管同一页面
 
 端口写在 `config.json` 里（Windows：`%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json`）：
 
@@ -252,21 +250,19 @@ BrowserOS neo 的 MCP 后端是开源的 Rust 服务（`browseros-ai/BrowserOS` 
 {"ports":{"cdp":9110,"proxy":9010,"server":9210}}
 ```
 
-`ports.cdp` 就是 MCP 服务器自己用的那条通道 —— **直连它没有归属校验，也没有 60 秒上限**。
-零依赖驱动脚本：**`scripts/cdp.mjs`**（Node 18+，零第三方包）。
+`ports.cdp` 对本机浏览器页面没有 MCP 的页面归属检查，也不受 MCP evaluate 传输超时限制。
+零依赖驱动脚本：**`scripts/cdp.mjs`**（Node 18+，零第三方包）。接管时只使用同一 targetId：
 
 ```bash
-node scripts/cdp.mjs port                        # 读出 CDP 端口（默认 9110）
-node scripts/cdp.mjs list                        # 列页面
-node scripts/cdp.mjs open "https://…/apply"      # 开一个页，拿 targetId（只开一个！）
-node scripts/cdp.mjs eval <targetId> fill.js 900000   # 跑几分钟的填充脚本
-node scripts/cdp.mjs click <targetId> "span.del-btn"  # 真实鼠标点击
+node scripts/cdp.mjs port                        # 读取备用 CDP 端口
+node scripts/cdp.mjs list                        # 找 MCP 正在使用的同一页面
+node scripts/cdp.mjs eval <same-targetId> fill.js 600000
+node scripts/cdp.mjs click <same-targetId> "span.del-btn"  # MCP act 连续失败时才用
 ```
 
-工作方式：把要干的事写成一个 JS 文件（可以几千行、包含 15 次「加一条记录 + 填 7 个字段 + 选日期」的循环），
-一次 `eval` 跑到完，中途用 `return` 汇总结果。**整个过程只用一个页、不会产生重复标签页。**
+完成 CDP 接管后，回到 MCP 做 `snapshot` 或短 `evaluate` 校验；只有确认 MCP 无法继续时才保留长任务。
 
-### 8.4 三个只有 CDP 才做得干净的动作
+### 8.4 备用通道能处理的动作
 
 1. **真实鼠标点击**（`click` / `revalclick`）：走 CDP `Input.dispatchMouseEvent`，浏览器视为真人点击。
    ⚠️ **两者对表达式的返回形状要求不同**：`revalclick` 要**单个元素**，`clickn` 要**元素数组**。
@@ -288,14 +284,13 @@ node scripts/cdp.mjs click <targetId> "span.del-btn"  # 真实鼠标点击
    （删除按钮 + 它的「确认删除」弹窗按钮，实测只有这条路能生效。）
 3. **长时间批量 + 中途落盘**：脚本里把进度写进 `localStorage`（同源跨页可读），随时另开页查看进度。
 
-### 8.5 走 MCP 时的止损规则（不改代码的前提下）
+### 8.5 MCP 短批次的止损规则
 
-- 单次 `evaluate` **≤ 40 秒**，宁可拆成多次；绝不超过 60 秒。
-- 浏览器操作之间**不要有长间隔**（长时间 `sleep`、等用户回复都可能让会话过期）。
-- 一批只用一个页，做完就 `保存`，不要指望 DOM 里的未保存状态能跨会话活着。
-- 若要延长空闲窗口，可给 claw-server 进程设环境变量：`CLAW_SESSION_IDLE_MS`（默认 1800000）、
-  `CLAW_SESSION_RETENTION_MS`（默认 3600000）、`CLAW_SESSION_SWEEP_INTERVAL_MS`（默认 60000）。
-  这只能救「空闲丢归属」，救不了 60 秒超时；真要长任务走 MCP，只能自己改源码重编（见 §8.2 的路径）。
+- 单次 MCP `evaluate` 的 transport timeout ≤25 秒；页面脚本 `maxRunMs` 默认 18000ms，宁可多次短调用。
+- `20_fill.js` 返回 `deferred` 不算失败：同一 page、同一 mapping 重跑，已完成字段会被跳过。
+- `probeOptions` 以约 16 秒为默认预算，并把已读分组增量缓存到 localStorage。
+- MCP 操作之间不要长时间空置；等待渲染用 `wait(for="selector")`，不要在页面脚本里长时间 `sleep`。
+- timeout 后先做只读状态回读；确认未完成后再续跑。ownership 丢失才进入 CDP fallback。
 
 ### 8.6 写库型页面的黄金流程（血泪总结）
 
@@ -307,39 +302,35 @@ node scripts/cdp.mjs click <targetId> "span.del-btn"  # 真实鼠标点击
 4. 删除行要**用真实点击**（或 React onClick），并在确认框弹出后再点一次「确认」。
 5. 最后再 dump 一次完整清单交给用户人工复核；**提交/投递按钮永远留给用户**。
 
-### 8.8 混合模式标准流程（2026-09-14 汇川自建站实测定稿；SKILL.md §2 的执行依据）
+### 8.8 MCP-first 标准流程
 
-> 实测背景：react-aria + Tailwind 自建站，9 区块长表单（54→243 字段）、15 个重复项目块、
-> react-aria 多选/级联/搜索树弹层、contenteditable 日期分片、受控 file input。
-> 一次会话内 MCP 重建 **3 次**（含一次由 `browseros-neo_run` 连续报错触发）；CDP 全程无中断。
+> 长表单也先拆成 MCP 短批次。下面的 CDP 只在单步 MCP 失败、ownership 丢失或上传 change 链路失败时启用。
 
 **分工决策表**（先判类型，再选通道）：
 
-| 控件/任务 | 通道 | 要点 |
+| 控件/任务 | 首选通道 | CDP fallback |
 |---|---|---|
-| 页面脚本（扫描/批量直写/状态导出） | CDP `eval` | 输出直落盘；MCP evaluate 有 5000 字符截断，别用来跑脚本 |
-| 文本 / textarea / 原生 `<select>` / 隐藏 `<input type=date>` | CDP `eval` 批量 | native setter + `input`/`change`；逐字段回读 `OK/MISMATCH`；date input 直写后分片显示自动联动 |
-| radio / 开关 / 自定义按钮 | CDP `revalclick`/`clickn`（真实点击） | **合成 `click()` 会假成功**：DOM `checked=true` 但不进 React store，重渲染即丢（实测踩中） |
-| popover 多选/级联/搜索树/日历 | MCP `act` | 真实输入 + 遮挡检测 + diff 回读；开面板→点选项→点面板外空白关闭（Esc/「取消」常被 fixed header 遮挡） |
-| contenteditable 日期分片 | CDP `focus` + MCP `act type` | 合成 `KeyboardEvent` 无效、合成 `beforeinput(insertText)` 可用但不稳；**真实键盘最稳**：focus 年段后一次 type 8 位 `20240901`，逐段自动流转 |
-| 受控 `<input type=file>` | CDP `uploadc`（文件选择器拦截） | `DOM.setFileInputFiles` 直设**不触发 change** 且 React 下一帧重置 input——文件静默丢失（实测踩中） |
-| 滚动/等待 | CDP eval 或 MCP `act scroll`/`wait` | sticky 底栏会盖内容，交互前 `scrollIntoView({block:'center'})` |
+| 页面脚本（扫描/短批次填充/状态导出） | MCP `evaluate`，timeout ≤25s | ownership 丢失或短批次持续失败时 `cdp.mjs eval` |
+| 文本 / textarea / 原生 `<select>` / 日期 | MCP `evaluate(20_fill.js)`，18s 业务预算 | `cdp.mjs eval`，完成后回 MCP 校验 |
+| radio / 开关 / 自定义按钮 | MCP `act` + snapshot/diff | `cdp.mjs revalclick/clickn` |
+| popover 多选/级联/搜索树/日历 | MCP `act` | MCP 连续失败后 CDP 真实点击 |
+| contenteditable 日期分片 | MCP `act focus/type` | CDP `focus` 后回 MCP `type` |
+| 受控 `<input type=file>` | MCP `upload` 真实 file input | CDP `uploadc`，再 MCP 回读 |
+| 滚动/等待 | MCP `act scroll` / `wait` | CDP 仅用于页面已失去 ownership 的恢复 |
 
-**MCP 三条红线**（保证不撞 60s / 不丢归属）：
+**MCP 超时规则：**
 
-1. **MCP 只用单步原语**（`tabs`/`snapshot`/`act`/`wait`），页面脚本一律 CDP `eval`；
-   确需 MCP `evaluate` 时单次 ≤ 40 秒（60s 限制留 20s 余量）。
-2. **MCP 调用保持连续**（间隔 < 30 分钟空闲回收阈值）；长批处理交 CDP，MCP 只做短交互。
-3. **CDP 兜底**：报 `page N is not owned by this agent` 时不重开页、不丢状态——
-   `node scripts/cdp.mjs eval/click/revalclick <targetId> …` 直接接管同一页继续干。
+1. MCP `evaluate` 使用 ≤25 秒的 transport timeout；脚本默认 18 秒业务预算，返回 `deferred` 就同页重跑。
+2. `snapshot/diff` 是交互后的回读手段；脚本结果较大时按 section 或状态查询拆分，不为捞完整输出切换 CDP。
+3. MCP timeout 后先只读回读；不要重复执行会添加记录块的操作。ownership 丢失后才用 CDP 接管。
 
-**实测数据（混合 vs 纯 CDP vs 纯 MCP）**：
+**实测数据（当年混合模式的历史测得，是现在短批次预算的设计依据）**：
 
-- 批量 45 文本字段：CDP 一次 eval ~5s（MCP evaluate 会被 5000 字符截断 → 捞 tool-output 多一步）。
-- 30 个 date input：CDP 一次 eval ~3s。
-- 加 14 个重复块：CDP 合成 click ×14 ~12s（注意 §5 坑表「找按钮误点其他区块」）。
-- 单步 MCP act（click/type）：每次 ~1-3s 工具往返 + agent 思考时间；质量高（遮挡拦截 + diff 自验证）。
-- 附件：`uploadc` 拦截模式一次成功；`upload` 直设模式 0% 成功（React 重置）。
+- 批量 45 文本字段：CDP 一次 eval ~5s —— 拆成 18s 短批次后 MCP evaluate 同样能吃完（按 10–15 字段/批）。
+- 30 个 date input：CDP 一次 eval ~3s —— 直写型字段在单批内开销极小。
+- 加 14 个重复块：CDP 合成 click ×14 ~12s（注意 §5 坑表「找按钮误点其他区块」）；现在按 `25_mokahr_fiber.js` 的 partial/add deferred 语义分批做。
+- 单步 MCP act（click/type）：每次 ~1-3s 工具往返 + agent 思考时间；质量高（遮挡拦截 + diff 自验证）——这是它成为默认交互通道的原因。
+- 附件：`uploadc` 拦截模式一次成功；`upload` 直设模式 0% 成功（React 重置）——MCP upload 失败时的备用顺序不变。
 
-**经验法则**：能用 CDP 批量的用 CDP；需要「看页面再决定点哪」的交互用 MCP act；
-分片键入用 CDP focus + MCP type；受控上传用 `uploadc`；MCP 一死立即 CDP 接管，绝不重开页面重填。
+**经验法则**：默认走 browseros-neo MCP；页面脚本拆成短批次，交互用 `act` 并立即 `snapshot/diff` 回读。
+只有 MCP 明确无法继续时，才用 CDP 接管同一页面，完成后回 MCP 校验，绝不主动重开页面重填。

@@ -182,6 +182,15 @@ def main():
     else:
         check("跳过 JS 语法检查（本机无 node）", True)
 
+    fill_source = open(os.path.join(SCRIPTS, "20_fill.js"), encoding="utf-8").read()
+    fiber_source = open(os.path.join(SCRIPTS, "25_mokahr_fiber.js"), encoding="utf-8").read()
+    readme_source = open(os.path.join(REPO, "README.md"), encoding="utf-8").read()
+    skill_source = open(os.path.join(REPO, "SKILL.md"), encoding="utf-8").read()
+    check("MCP 填充器有短批次预算", "maxRunMs: 18000" in fill_source and "timeout=25000" in fill_source)
+    check("MCP 填充超时返回 deferred 而不是假装失败", "deferred" in fill_source and "budgetExceeded" in fill_source)
+    check("组件 API 填充器同样支持短批次续跑", "maxRunMs" in fiber_source and "deferred" in fiber_source)
+    check("文档默认 browseros-neo MCP、CDP 只做备用", "MCP-first" in skill_source and "MCP first" in readme_source)
+
     print("8) 标签归一化与选项打分（选项匹配只出建议）")
     check("norm_label 去「（必填）」", jaa_lib.norm_label("毕业时间（必填）") == jaa_lib.norm_label("毕业时间"))
     check("norm_label 去括号内容（项目名称（英文））", jaa_lib.norm_label("项目名称（英文）") == jaa_lib.norm_label("项目名称"))

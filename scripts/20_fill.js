@@ -1,7 +1,8 @@
 // scripts/20_fill.js —— 通用表单填充器（与站点无关，靠 10_scan_form.js 打的 data-jaa-* 标记定位）
-// 用法：改好 MAPPING 后整段粘进 browseros-neo_evaluate(page=<id>, timeout=120000)
-//   返回 { ok, skipped, failed, suggestions, probed, notes, log }
-//   ok / skipped / failed / suggestions 都是 {uid,label,value,detail}
+// 默认运行在 browseros-neo_evaluate 中；每次调用都必须是可续跑的短批次。
+// 用法：改好 MAPPING 后整段粘进 browseros-neo_evaluate(page=<id>, timeout=25000)
+//   返回 { ok, skipped, failed, suggestions, probed, deferred, notes, log }
+//   ok / skipped / failed / suggestions / deferred 都是 {uid,label,value,detail}
 //
 // 铁律：
 //   * 只写表单字段，**绝不点击提交/发送/投递类按钮**（SUBMIT_RE 拦截）
@@ -30,7 +31,9 @@ const OPTS = {
   probeOptions: false,       // true = 只开下拉把选项读出来放进 probed，不选任何东西
   probeOnly: null,           // null/[] = 全部；数组 = 只探测这些（uid 或字段名子串），未列出的整组跳过
   probeSkipFilled: false,    // true = 已有值的下拉不再打开（省时；代价是拿不到已填字段的选项清单）
-  probeBudgetMs: 0,          // >0 = 探测最多跑这么久就返回部分结果（进度已增量存 localStorage，重跑自动续）
+  probeBudgetMs: 16000,       // MCP 短批次预算；探测结果会缓存到 localStorage，超时后重跑即可续
+  maxRunMs: 18000,            // 单次页面脚本预算；0 = 不限（仅 CDP 备用时使用）
+  maxJobs: 0,                 // 单次最多实际写入多少字段；0 = 只受 maxRunMs 限制
   probeCacheKey: '',         // 探测缓存 localStorage 键；留空按 host+jobId 自动生成
   simulateTyping: false,     // true = 逐字符模拟键盘输入（对付只认真实 keydown 的富文本/联想框）
   typingDelayMs: 12,
@@ -183,6 +186,8 @@ const PANEL_ROOT_SEL = '.ant-select-dropdown, .ant-picker-dropdown, .ant-calenda
 // —— 基础工具 ——
 const CLEAN = s => (s || '').replace(/[\u200b-\u200f\ufeff]/g, '').replace(/\s+/g, ' ').trim();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const runDeadlineAt = Number(OPTS.maxRunMs) > 0 ? Date.now() + Number(OPTS.maxRunMs) : 0;
+const budgetExpired = () => runDeadlineAt > 0 && Date.now() >= runDeadlineAt;
 const SUBMIT_RE = /提交|递交|投递|立即申请|确认申请|完成投递|发送|submit|apply now|send|继续|下一步|next|完成|发布|支付|pay|删除|delete|取消|cancel/i;
 
 const safeQ = (sel, root) => { try { return [...(root || document).querySelectorAll(sel)]; } catch (e) { return []; } };
@@ -228,7 +233,11 @@ const isNonPanel = el => {
 };
 
 const waitFor = async (fn, tries = 30, interval = OPTS.panelWaitMs) => {
-  for (let i = 0; i < tries; i++) { if (await fn()) return true; await sleep(interval); }
+  for (let i = 0; i < tries; i++) {
+    if (budgetExpired()) return false;
+    if (await fn()) return true;
+    await sleep(interval);
+  }
   return false;
 };
 
@@ -239,8 +248,9 @@ const scrollIntoView = async el => {
 
 // 真实鼠标序列：pointerdown → mousedown → mouseup → click（带坐标，React/Vue 事件委托才认）
 const clickReal = async (el, delay = 8) => {
-  if (!el) return false;
+  if (!el || budgetExpired()) return false;
   await scrollIntoView(el);
+  if (budgetExpired()) return false;
   const r = el.getBoundingClientRect();
   const cx = r.left + Math.max(0, r.width) / 2, cy = r.top + Math.max(0, r.height) / 2;
   const o = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, screenX: cx, screenY: cy, button: 0, buttons: 1 };
@@ -251,7 +261,7 @@ const clickReal = async (el, delay = 8) => {
   el.dispatchEvent(new MouseEvent('mouseup', o)); await sleep(delay);
   el.dispatchEvent(new MouseEvent('click', o));
   await sleep(delay * 2);
-  return true;
+  return !budgetExpired();
 };
 
 const closeOverlays = async () => {
@@ -289,9 +299,11 @@ const setNative = async (el, val) => {
 const simulateType = async (el, val, delay = OPTS.typingDelayMs) => {
   const isInput = el.tagName === 'INPUT', isArea = el.tagName === 'TEXTAREA', isEditable = el.isContentEditable;
   if (!isInput && !isArea && !isEditable) return false;
-  await setNative(el, '');
-  await sleep(10);
-  for (let i = 0; i < val.length; i++) {
+  const current = String(isEditable ? (el.textContent || '') : (el.value || ''));
+  let startAt = current && val.startsWith(current) ? current.length : 0;
+  if (!startAt) { await setNative(el, ''); await sleep(10); }
+  for (let i = startAt; i < val.length; i++) {
+    if (budgetExpired()) return false;              // 保留已输入前缀；下一短批次从前缀继续
     const ch = val[i];
     const code = ch.length === 1 ? 'Key' + ch.toUpperCase() : ch;
     try { el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, code, bubbles: true, cancelable: true, composed: true })); } catch (e) {}
@@ -688,6 +700,7 @@ async function calendarPick(container, dateStr, cfg, stopAt) {
   const DAY_DROP = /disabled|last-month|next-month|prev-month|not-current|other-month|outside|forbidden/i;
 
   while (guard++ < 240) {
+    if (budgetExpired()) return false;
     if (cfg.subContainerSelector) { const s = q1(cfg.subContainerSelector, box); if (s) box = s; }
 
     if (state === 'year') {
@@ -1049,8 +1062,22 @@ const radioText = e => CLEAN(
 
 // ======== 主流程 ========
 return (async () => {
-  const log = [], ok = [], skipped = [], failed = [], suggestions = [], notes = [];
+  const startedAt = Date.now();
+  const runBudgetMs = Math.max(0, Number(OPTS.maxRunMs) || 0);
+  const maxJobs = Math.max(0, Number(OPTS.maxJobs) || 0);
+  let attemptedJobs = 0;
+  let budgetExceeded = false;
+  const log = [], ok = [], skipped = [], failed = [], suggestions = [], notes = [], deferred = [];
   const probed = {};
+  const shouldYield = () => (runBudgetMs > 0 && Date.now() - startedAt >= runBudgetMs)
+    || (maxJobs > 0 && attemptedJobs >= maxJobs);
+  const deferJob = job => deferred.push({
+    uid: job.uid || job.key,
+    label: job.el?.getAttribute('data-jaa-label') || job.key,
+    value: job.want,
+    detail: 'MCP 时间预算用尽，下一次用相同 mapping 重跑即可继续'
+  });
+
   const byUid = (uid, block) => {
     const sel = block === undefined || block === null || block < 0
       ? `[data-jaa-uid="${uid}"]`
@@ -1060,7 +1087,7 @@ return (async () => {
 
   const entries = Object.entries(MAPPING).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(typeof v === 'object' && (v.v === undefined || v.v === null || v.v === '')));
   // ⚠️ probeOptions 模式允许 MAPPING 为空（纯只读探测，不写任何字段）
-  if (!entries.length && !OPTS.probeOptions) return { ok, skipped, failed, suggestions, probed, notes: ['MAPPING 为空：先跑 10_scan_form.js 拿 uid'], log };
+  if (!entries.length && !OPTS.probeOptions) return { ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes: ['MAPPING 为空：先跑 10_scan_form.js 拿 uid'], log };
 
   // 解析目标元素 → 按 DOM 顺序处理（父级下拉/级联先于子级）
   const jobs = [];
@@ -1086,7 +1113,8 @@ return (async () => {
     return 0;
   });
 
-  for (const job of jobs) {
+  for (let jobIndex = 0; jobIndex < jobs.length; jobIndex++) {
+    const job = jobs[jobIndex];
     const { want, mode, gran, el } = job;
     const uid = el.getAttribute('data-jaa-uid');
     const label = el.getAttribute('data-jaa-label') || job.key;
@@ -1110,6 +1138,12 @@ return (async () => {
       if (!OPTS.probeOptions && alreadyOk) {
         rec(skipped, { detail: `已是 ${before}` }); continue;
       }
+      if (shouldYield()) {
+        budgetExceeded = true;
+        for (let i = jobIndex; i < jobs.length; i++) deferJob(jobs[i]);
+        break;
+      }
+      attemptedJobs++;
 
       // 显式 mode 优先（站点 adapter / 人工指定）
       let r;
@@ -1156,9 +1190,21 @@ return (async () => {
         probed[uid] = r.probe;
         notes.push(`${label}: 探测到 ${r.probe.length} 个候选选项（未选择）`);
       } else if (r && r.ok) rec(r.skipped ? skipped : ok, { detail: r.note || `→ ${readDisplay(el)}` });
-      else {
+      else if (budgetExpired()) {
+        // 预算在本字段中途用尽（模拟输入/点击/日历被打断）：不记 failed，交给下一批幂等续跑
+        budgetExceeded = true;
+        deferJob(job);
+        for (let i = jobIndex + 1; i < jobs.length; i++) deferJob(jobs[i]);
+        break;
+      } else {
         rec(failed, { detail: (r && r.detail) || '未知原因', suggestions: (r && r.suggestions) || [], optionsSample: (r && r.optionsSample) || [] });
         if (r && r.suggestions && r.suggestions.length) suggestions.push(row({ detail: `建议值：${r.suggestions.join(' / ')}`, suggestions: r.suggestions }));
+      }
+      if (budgetExpired() && jobIndex + 1 < jobs.length) {
+        // 本字段已成功收尾，但预算用尽：把剩余字段全部 deferred
+        budgetExceeded = true;
+        for (let i = jobIndex + 1; i < jobs.length; i++) deferJob(jobs[i]);
+        break;
       }
     } catch (e) {
       rec(failed, { detail: '异常: ' + (e && e.message ? e.message : String(e)) });
@@ -1183,6 +1229,10 @@ return (async () => {
     try { cache = JSON.parse(localStorage.getItem(cacheTag) || '{}'); } catch (e) {}
     const saveCache = () => { try { localStorage.setItem(cacheTag, JSON.stringify(cache)); } catch (e) {} };
     const t0 = Date.now();
+    const probeBudgetMs = Math.min(
+      OPTS.probeBudgetMs > 0 ? OPTS.probeBudgetMs : Infinity,
+      runBudgetMs > 0 ? Math.max(1, runBudgetMs - (t0 - startedAt)) : Infinity
+    );
     const allProbeEls = safeQ('[data-jaa-kind="custom-select"], [data-jaa-kind="popup-picker"]').map(e => [e.getAttribute('data-jaa-uid'), e]);
     const groups = new Map();          // key -> [uid, el][]
     for (const [uid, el] of allProbeEls) {
@@ -1202,17 +1252,35 @@ return (async () => {
       if (!wantProbe(uid0, el0)) { skippedN++; continue; }
       // 已填的下拉不再打开（probeSkipFilled）：省时间，也不扰动简历解析已填好的表单
       if (OPTS.probeSkipFilled && grp.some(([, el]) => { const v = readDisplay(el); return v && normText(v) && normText(v) !== '请选择'; })) { skippedN++; continue; }
-      if (OPTS.probeBudgetMs && Date.now() - t0 > OPTS.probeBudgetMs) { notes.push(`probe 预算 ${OPTS.probeBudgetMs}ms 用尽：已缓存 ${Object.keys(cache).length} 组，重跑自动续`); break; }
+      if ((probeBudgetMs !== Infinity && Date.now() - t0 >= probeBudgetMs) || budgetExpired()) {
+        budgetExceeded = true;
+        notes.push(`probe 预算 ${Math.round(probeBudgetMs)}ms 用尽：已缓存 ${Object.keys(cache).length} 组，重跑自动续`);
+        deferred.push({ uid: uid0, label: el0.getAttribute('data-jaa-label') || uid0, value: '', detail: '选项探测待续' });
+        break;
+      }
       try {
         const cfg = cfgFor(el0);
         const trigger = triggerOf(el0, cfg);
         const panel = await openPanel(el0, trigger, (cfg && cfg.option_container_selector) || PANEL_ROOT_SEL, (cfg && cfg.option_selector) || OPT_PROBE_SEL);
+        if (budgetExpired()) {
+          budgetExceeded = true;
+          deferred.push({ uid: uid0, label: el0.getAttribute('data-jaa-label') || uid0, value: '', detail: '选项探测待续' });
+          await closeOverlays();
+          break;                                      // 超时边界不把“暂时没读到”缓存成永久空数组
+        }
         const opts = panel ? collectOptions(panel, (cfg && cfg.option_selector) || OPT_PROBE_SEL) : [];
         const texts = opts.map(o => o.text);
         grp.forEach(([uid]) => { probed[uid] = texts; });
         cache[key] = texts; saveCache();
         opened++;
-      } catch (e) { grp.forEach(([uid]) => { probed[uid] = []; }); cache[key] = []; saveCache(); }
+      } catch (e) {
+        if (budgetExpired()) {
+          budgetExceeded = true;
+          deferred.push({ uid: uid0, label: el0.getAttribute('data-jaa-label') || uid0, value: '', detail: '选项探测待续' });
+          break;
+        }
+        grp.forEach(([uid]) => { probed[uid] = []; }); cache[key] = []; saveCache();
+      }
       try { localStorage.setItem(cacheTag + ':progress', `opened=${opened}/${groups.size} elapsed=${Date.now() - t0}ms`); } catch (e) {}
       await closeOverlays();
     }
@@ -1221,9 +1289,10 @@ return (async () => {
   }
 
   return {
-    ok, skipped, failed, suggestions, probed, notes,
+    ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes,
+    elapsedMs: Date.now() - startedAt,
     log: [
-      `写入成功 ${ok.length} / 跳过 ${skipped.length} / 失败 ${failed.length}${OPTS.probeOptions ? ' / probe 模式' : ''}`,
+      `写入成功 ${ok.length} / 跳过 ${skipped.length} / 失败 ${failed.length}${OPTS.probeOptions ? ' / probe 模式' : ''}${budgetExceeded ? ' / 已达到 MCP 短批次预算，重跑续接' : ''}`,
       ...failed.map(f => `FAIL ${f.label}: ${f.detail}`),
       ...suggestions.map(s => `SUGGEST ${s.label}: ${s.detail}`)
     ]

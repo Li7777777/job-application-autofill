@@ -2,9 +2,9 @@
 
 > 实测于 2026-09-11，校招（`postType=campus`）。站点内核是**北森 wecruit**（API 前缀 `/wecruit/`），
 > 前端是自研 antd 3.x 单页应用，**不是** mokahr。
-> ⚠️ 这个站是「先补在线简历 → 才能投递」，而且简历表单有 100+ 字段、**每次操作整表重渲染**，
-> 单次浏览器调用很容易超过 60 秒 → 长任务请走 `scripts/cdp.mjs`（见 references/strategies.md §8），
-> 否则 MCP 会话会被换掉、页归属丢失（本站在实测中因此堆了十几个标签页）。
+> ⚠️ 这个站是「先补在线简历 → 才能投递」，而且简历表单有 100+ 字段、**每次操作整表重渲染**。
+> 现在默认用 browseros-neo MCP 的短批次：`evaluate` timeout≤25s、脚本业务预算 18s，收到 `deferred`
+> 就在同一 page 续跑。只有 ownership 丢失或 MCP 真实交互连续失败时，才用 `scripts/cdp.mjs` 接管原 targetId。
 
 ## 1. URL 地图
 
@@ -123,11 +123,11 @@ https://wecruit-cdn.hotjob.cn/files/oline/HONOR/{hash}.json   ← hash 从 perfo
 `0/209` 婚姻状况、`0/606` 学历、`0/435` 学位、`0/437` 语种、`0/126801` 编程语言、`0/126901` 掌握程度、
 `0/100606` 学习成绩排名、`0/104788` 获奖级别、`0/104782` 获奖等级、`0/100429` 应聘渠道来源、`0/103401` 意向工作地。
 
-## 9. 会话坑 → 直接上 CDP
+## 9. 长表单的 MCP 短批次与 CDP 备用接管
 
-- 本站在 MCP 下**几乎必然触发会话重建**：字段多、单次操作慢，批量填充必然 >60 秒。
-  症状 = 填一半报 `page N is not owned by this agent`、标签页越开越多。
-- 结论：**这个站一次到位地用 `scripts/cdp.mjs`**（`node scripts/cdp.mjs open <编辑器URL>` 开 **一个**页，
-  之后所有 `eval / click / revalclick` 都指向它），全程不会再出现归属问题。
+- 扫描、普通字段、状态导出都优先走 browseros-neo MCP；每批控制在 18 秒业务预算内，
+  返回 `deferred` 就同页续跑，避免一次调用跨过 transport timeout。
+- 报 `page N is not owned by this agent` 时，不再开新页：用 `cdp.mjs list` 找到原 targetId，
+  只接管剩余动作；完成后回 MCP 做状态回读。
 - `evaluate` 里别对整个 `document.querySelectorAll('div')` 跑 `innerText` 正则（会卡到超时），
   用 `div.add-more-btn`、`span.del-btn` 这类精确选择器。

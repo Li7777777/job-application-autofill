@@ -248,7 +248,7 @@ node scripts/cdp.mjs clickn <target> expr_radios.js 450
 2. 按 label 补齐文本（英文名/证件号码/学院名称…）
 3. 日期用 phoenix-calendar 三层点选
 4. 下拉用 `.phoenix-selectList__listItem`
-5. **单选一律走 `clickn`（真实点击）**，并回读 `--checked` 验证
-6. 文件用 `cdp.mjs upload`
+5. **单选优先 MCP `act` 真实点击**并回读 `--checked`；MCP 连续失败才用 `clickn`（合成 `click()` 会假成功）
+6. 文件优先 MCP `upload`（显形真实 file input）；MCP 失败才用 `cdp.mjs uploadc/upload`
 7. `dump2.js` 式的按 label 快照做校验（别用通用扫描器）
 8. **提交按钮永远留给用户**
