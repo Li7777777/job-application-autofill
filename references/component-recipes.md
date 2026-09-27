@@ -275,3 +275,54 @@ ant-picker ant-calendar ud-picker ux-calendar rc-picker
 - 面板在 **iframe** 里 → `evaluate` 的 `document` 看不到；需要 `scripts/cdp.mjs eval` 指定 frame，
   或在 `OVERRIDE.extraControlSelector` 里换思路。
 - 站点用 **canvas** 画表格（部分在线简历编辑器）→ 无解，只能走站点自己的「导入简历」入口。
+
+## 11. 第 8 类框架：shadcn/ui（Radix 原语）——七大 detect 全不命中，走组件 API
+
+2026-09-24 在姚记招聘官网（飞书妙搭 / aPaaS 生成的 React18 SPA）实测。这类站现在越来越多：
+**Tailwind 类名没有任何组件语义**（`border-input`、`data-[state=open]:animate-in`、`space-y-1.5`），
+所以 `assets/platform-selectors.json` 的 7 套 detect 一条都不命中，`platform.framework = null`，
+扫描器还会把裸 `input` 误判成 `custom-select`、把 label 里的 `*` 丢掉导致 `required` 全 False。
+
+**打法：不要开面板，直接从 React fiber 拿组件的 `onValueChange`。**
+
+| 控件 | DOM 形态 | 写法 |
+|---|---|---|
+| Select | `<button role="combobox" data-state>` | trigger 上溯约 14 层找 `memoizedProps.onValueChange` + `value` → 直写选项 value |
+| RadioGroup | `<div role="radiogroup">` + `<button role="radio" data-state>` | 同上（value 常是 `yes/no` 这类内部码，从子节点 `memoizedProps.value` 读，**不是可见文本**） |
+| Checkbox | `<button role="checkbox" data-state>` | 同 Root 套路；⚠️ **同意条款类一律不代勾** |
+| 原生 radio / input | 真 `input[type=radio|text|number|email]` | 走 §4 写入原语；radio 用 `checked` 的 prototype setter + `click()` |
+
+枚举真实选项值（**不开面板**也能拿到，比 probe 更快）：遍历 Root fiber 子树，
+`memoizedProps.value` 是 string 且带 `onSelect` / `textValue` 的就是 `SelectItem`。
+
+### 三个必须避开的陷阱
+
+1. **MCP `act click` 点 Radix trigger 经常打不开**（Radix 只听 `pointerdown`，补发 mouse 序列不生效，
+   `aria-expanded` 一直是 `false`）。合成 `new PointerEvent('pointerdown', {…})` 反而能开——但只用来**读选项**。
+2. **用真实鼠标点击选项 → 会留下 `data-state="closed"` 的常驻 listbox**：Radix `Presence` 的退场动画不结束就不卸载，
+   于是 `#root` 被永久 `aria-hidden="true"` → 之后 MCP `snapshot` 只剩那个 listbox，**任何下拉都再也点不开**，
+   派发 `Escape` / `animationend` 都救不回来（实测）。→ 这正是「组件 API 直写」优于「点面板」的地方。
+3. **`button[role=combobox]` 的 `textContent` 才是显示值**；`15_dump_state.js` 的 `readDisplay` 兜底可能读到
+   字段标签（把「性别」当值上报）→ 回读优先用 `fiber.memoizedProps.value` 或 trigger 自身的 `textContent`。
+
+另外这类站点的**必填星号在 label 内的独立 `<span>*</span>`**，`norm_label` 会把它清掉 →
+`required` 判定不可信，必须人工按「label 文本是否带 `*`」复核一遍再决定哪些是阻塞项。
+
+## 12. 日期输入顺序：有日期控件就先用组件（2026-09-25 落地）
+
+`20_fill.js fillDate()` 的固定顺序，每一步都先回读校验，绝不靠「显示层看起来有值」收工：
+
+| 顺序 | 场景 | 写法 |
+|---|---|---|
+| ① | 原生 `input[type=date\|month\|datetime-local\|week]` | 值 setter + `input/change`。原生控件的「组件 API」就是它；`showPicker()` 需要用户手势，脚本里点不出日历 |
+| ② | **识别到日期组件**（`.ant-picker` / `.el-date-editor` / `.ivu-date-picker` / `.ud__picker` / `.next-date-picker` / `[class*=date_info]` 等）或**只读**日期框 | `openDatePanel()` 真实鼠标序列打开面板 → `calendarPick()` 年→月→日 → 回读。受控组件的正路：直写文本常常只是显示层假成功 |
+| ③ | 组件面板没打开 / 面板里没有目标日期 | 输入框可写才回退文本直写，`detail` 里注明「组件面板未成功」；仍然回读校验 |
+| ④ | 普通文本框（只有占位符像日期，无组件信号） | 直写优先（快路径）；直写回读不符仍会再试一次面板 |
+
+要点：
+- `openDatePanel()` 点击顺序是「输入框 → 组件根 → 框架触发元素」，任一目标打开面板即停，不会为后续目标浪费时间。
+- 非组件的可写输入只给 600ms 面板探针预算，组件/只读才用满 `panelTimeoutMs`，不让普通年月框白等超时。
+- `calendarPick()` 找不到目标日期就如实失败，**不挑最近可用日**；组件粒度不够就按已选到的粒度收尾并注明。
+- `25_mokahr_fiber.js` 的 `date_info`/`day_info` 走 React fiber `_set_`（组件自己的 API）与月份面板兜底，同属「组件写法」，不回退裸 DOM 文本。
+- `tests/fixtures/form-lab.html` 同时覆盖只读（`#birth`）与可写（`#birthYm`，`.ant-picker` wrapper）两条路径；
+  `tests/browser_e2e.py` 用 `window.__dateWrites` 断言可写组件走的是 `via:'panel'` 而不是直写。

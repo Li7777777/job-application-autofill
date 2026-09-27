@@ -13,6 +13,7 @@
   · 多段经历各自取到画像的第 1/2 条
   · 自定义下拉真的被打开并选对；弹层里的选项没有被误点（只点精确匹配）
   · 只读日期框 → 日历面板 → 年 → 月 → 日，最后真的落到目标日期
+  · 可写日期组件 → 优先走组件面板（年 → 月），不靠文本直写（fixture 用 __dateWrites 记录落值路径）
   · 提交按钮一次都没被点（window.__submits 必须为 0）
   · 页面上确实出现了期望的值
 
@@ -141,6 +142,8 @@ def main():
               str((find("意向工作城市") or {}).get("kind")))
         check("控件类型：只读日期框 → date-picker", (find("出生日期 (年龄)") or {}).get("kind") == "date-picker",
               str((find("出生日期 (年龄)") or {}).get("kind")))
+        check("控件类型：可写日期组件 → date-picker", (find("出生年月") or {}).get("kind") == "date-picker",
+              str((find("出生年月") or {}).get("kind")))
         check("必填识别（required-asterisk）", (find("姓名") or {}).get("required") is True)
         check("非必填不误报", (find("推荐码") or {}).get("required") is False)
 
@@ -257,7 +260,8 @@ def main():
         print("\n4) 页面副作用（提交拦截 / 误点检查）")
         f = os.path.join(tmp, "step_probe.js")
         open(f, "w", encoding="utf-8").write(
-            "return { submits: window.__submits, clicks: window.__optionClicks, opens: window.__panelOpens };")
+            "return { submits: window.__submits, clicks: window.__optionClicks, opens: window.__panelOpens, "
+            "dateWrites: window.__dateWrites };")
         rc, out = cdp("eval", target, f)
         side = read_json_out(out)
         check("提交按钮一次都没被点（window.__submits === 0）", side.get("submits") == 0, str(side.get("submits")))
@@ -266,6 +270,11 @@ def main():
               sorted(set(clicked)) == sorted({"北京市", "男", "甲大学", "乙大学"}),
               str(clicked))
         check("下拉/日历确实被打开过（5 次：城市/性别/学校x2/生日）", (side.get("opens") or 0) >= 5, str(side.get("opens")))
+        dw = side.get("dateWrites") or []
+        check("可写日期组件走组件面板落值（出生年月 via panel）",
+              any(w.get("id") == "birthYm" and w.get("via") == "panel" for w in dw), str(dw))
+        check("可写日期组件没有被文本直写绕过（出生年月 无 via direct）",
+              not any(w.get("id") == "birthYm" and w.get("via") == "direct" for w in dw), str(dw))
 
         print("\n5) 状态导出 + 校验（15_dump_state.js / 30_verify.py）")
         f = os.path.join(tmp, "step_state.js")

@@ -70,7 +70,10 @@
     </div>
     <div class="apply-fields-2">
       <div class="title-2">出生年月</div>
-      <input type="text" id="birthYm" readonly placeholder="请选择年月">
+      <!-- 可写日期组件：antd 式 wrapper + 可编辑 input。测试「有组件先用组件面板」而不是直写文本 -->
+      <div class="ant-picker" id="birthYmBox">
+        <input type="text" id="birthYm" class="ant-picker-input" placeholder="请选择年月">
+      </div>
     </div>
   </div>
 
@@ -170,6 +173,7 @@
   window.__submits = 0;
   window.__optionClicks = [];      // 记录「哪一个选项被点过」——用来断言没有误点近似项
   window.__panelOpens = 0;
+  window.__dateWrites = [];        // 记录日期值是怎么落上的：via:'panel' = 组件面板，via:'direct' = 文本直写
 
   const log = m => { document.getElementById('log').textContent += m + '\n'; };
 
@@ -224,7 +228,7 @@
   }
   document.addEventListener('mousedown', e => {
     if (e.target.closest('[data-panel]') || e.target.closest('.sd-Select-container') || e.target.closest('.ant-select')) return;
-    if (['birth', 'birthYm'].includes(e.target.id) || e.target.closest('#picker')) return;
+    if (['birth', 'birthYm'].includes(e.target.id) || e.target.closest('#birthYmBox') || e.target.closest('#picker')) return;
     hideAllPanels();
   });
 
@@ -266,6 +270,10 @@
     mode = 'year'; decade = Math.floor(curY / 12) * 12;
     render(); picker.style.display = 'block'; window.__panelOpens++;
   });
+  // 直写路径（setNative 会派发 input）→ 记一笔，用于断言可写组件没有被直写绕过
+  document.getElementById('birthYm').addEventListener('input', () => {
+    window.__dateWrites.push({ id: 'birthYm', via: 'direct' });
+  });
   document.querySelector('.ant-picker-header-super-prev-btn').addEventListener('click', () => {
     if (mode === 'year') { decade -= 12; } else { curY -= 1; }
     render();
@@ -286,11 +294,12 @@
         // 年月粒度控件：选完月即结束，不出现「日」面板 —— 模拟 mokahr「出生年月」
         const val = curY + '-' + pad(curM);
         currentInput.value = val; currentInput.setAttribute('value', val);
+        window.__dateWrites.push({ id: currentInput.id, via: 'panel' });
         picker.style.display = 'none';
       } else { mode = 'day'; render(); }
     } else {
       const val = curY + '-' + pad(curM) + '-' + pad(n);
-      if (currentInput) { currentInput.value = val; currentInput.setAttribute('value', val); }
+      if (currentInput) { currentInput.value = val; currentInput.setAttribute('value', val); window.__dateWrites.push({ id: currentInput.id, via: 'panel' }); }
       picker.style.display = 'none';
     }
   });

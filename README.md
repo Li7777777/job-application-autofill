@@ -15,6 +15,19 @@ the result back to you for review.
 > fails the test suite if any of it shows up in a publishable file — see
 > [Leak guard](#leak-guard-personal-data-must-never-reach-the-repo).
 
+**最近更新（v1.4.0）**
+- 📥 **站点沉淀同步**：新增 5 份 adapter 笔记 —— i.zhaopin.com（Vue2+iView 在线简历，组件直写）、
+  www.zhipin.com（自研 Vue2 组件库）、zhaopin.yaoji.cn（飞书妙搭/aPaaS + shadcn/ui Radix）、
+  recruit.pg.com.cn（Moka 自建域名，双语按钮）、job.chinatelecom.com.cn（大易 WinTalent）；
+  mokahr 笔记追加景嘉微/虎牙实测（select 写标签原文、提交按钮文案闸门、个人中心进度页）。
+- 🗓️ **日期输入改为「有控件先用组件」**：识别到日期组件（antd/Element/iView/ATSX/飞书/fusion/mokahr/shadcn）
+  或只读日期框，就先开日历面板选（年→月→日）再回读校验；文本直写只在组件不可用/面板打不开时回退，
+  并在 `detail` 里注明。原生 `type=date|month` 走值 setter（`showPicker()` 需要用户手势，脚本点不出 OS 日历）。
+  配方见 `references/component-recipes.md §12`；e2e 用 `__dateWrites` 断言可写组件走面板而非直写。
+- 🔧 **Moka fiber 修正**：`select` 写标签原文（`option.value` 会假成功）、双语按钮文案归一、
+  `skipOptionProbe`/`skipRequiredErrors` 提速开关、`focus→input→blur` 触发组件自校验。
+- 🧪 漂移守卫新增 3 条日期契约检查（组件优先分支位置 / e2e 夹具覆盖可写组件路径）。
+
 **最近更新（v1.3.0）**
 - 🔀 **执行模式改为 MCP-first**：默认全流程走 `browseros-neo`（tabs/wait/evaluate/act/upload）；
   `scripts/cdp.mjs` 降级为显式备用（仅 ownership 丢失、真实交互连续失败、受控上传失败时接管同一页）。
@@ -52,8 +65,11 @@ almost nothing.
 - `scripts/25_mokahr_fiber.js` — **component-API fast path (try first on any site)**: React-fiber component-API writes (`_set_`), zero dropdown panels. `dump` decides in ~3s whether the site supports it; if not, fall back to the generic pipeline. Modes: dump / fill / store.
   optional per-character simulated typing, `contenteditable`, native `<select>`, checkbox/radio groups,
   **custom dropdowns** via a real mouse-event sequence (`pointerdown→mousedown→mouseup→click`) with
-  panel discovery and a non-panel blocklist, **cascader / tree-select** level-by-level, and read-only
-  date inputs driven by an 8-preset calendar engine (year grid → month aliases → day).
+  panel discovery and a non-panel blocklist, **cascader / tree-select** level-by-level, and date
+  pickers (read-only or editable) driven by an 8-preset calendar engine (year grid → month aliases → day).
+  Any recognized date-picker component goes through its calendar panel first — a text write into a
+  controlled picker input can be a display-only "fake success" — and only falls back to a verified
+  text write when no component signal exists or the panel cannot be opened.
   A `probeOptions` mode opens dropdowns **read-only** and returns every option text.
 - **Option gate, never a guess** — option matching only auto-picks on *exact* or *normalized-equal*
   (whitespace/punctuation/full-width insensitive) text. Contains (北京→北京市) and Chinese-abbreviation
@@ -199,8 +215,9 @@ python tests/selftest.py                             # group 11 enforces the sam
 
 **Verified working:** `input`/`textarea`/`select`/`checkbox`/`radio`, `type=date|month|color|range`,
 custom dropdowns (`role=combobox`, antd, Element, ATSX, mokahr `sd-Select`, Beisen phoenix,
-Feishu `ud__select`), cascader/tree-select, read-only date inputs whose calendar opens on
-`mousedown/mouseup/click` (8 built-in presets), `contenteditable` rich text, file inputs
+Feishu `ud__select`), cascader/tree-select, date pickers (read-only or editable) whose calendar opens on
+`mousedown/mouseup/click` (8 built-in presets, component panel first with a verified text-write fallback),
+`contenteditable` rich text, file inputs
 (paired with the browser tool's `upload`), multi-entry record blocks, composite year+month
 segment controls, and adaptive time granularity (year / year-month / full date).
 

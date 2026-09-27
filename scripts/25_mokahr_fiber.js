@@ -28,7 +28,9 @@
 //   可选：onlyIfEmpty:true（已有值就跳过）、force:true（回读对不上也认为成功）
 //
 // 取值形状（实测）：
-//   select → option.value（字符串）；bool_info → **数字 1/0**（传 true 显示会空）；
+//   select → **标签原文**（2026-09-24 虎牙实测：`_set_(option.value)`（如 性别→0）会「假成功」——display 为空
+//     且残留「这是必填项」→ 表单级报错；引擎已改成 label 优先、回读不符时再回退 option.value）；
+//   bool_info → **数字 1/0**（传 true 显示会空）；
 //   string_info/text_info → 字符串；date_info 起始端/单端 → "YYYY-MM"；
 //   day_info（出生日期）→ "YYYY-MM-DD"（组件自己截到月）；location_info（籍贯）→ "省/市/县"；
 //   confirm_info（同步更新在线简历开关）→ true/false（多岗投递务必先关）
@@ -90,7 +92,10 @@ return (async () => {
 
   function buildModel() {
     const m = collectFields().map(f => { const inf = f.memoizedProps.fieldInfo;
-      const optsSrc = (Array.isArray(inf.options) && inf.options.length) ? inf.options : [].concat(...selOptionsOf(hostDom(f)));
+      // CONFIG.skipOptionProbe：大表（20 行项目）下 selOptionsOf 要为每个空 options 字段爬 400 个后代×14 层 fiber，
+      // 建模型本身就要几十秒；纯文本/日期批次不需要内层 Select 选项时用它在页面里把建模型降到毫秒级。
+      const optsSrc = (Array.isArray(inf.options) && inf.options.length) ? inf.options
+        : (CONFIG.skipOptionProbe ? [] : [].concat(...selOptionsOf(hostDom(f))));
       return { p: f.memoizedProps, dom: hostDom(f), blockId: inf.blockId, fid: inf.id, label: inf.name, type: inf.type, req: !!inf.isRequired,
         opts: optsSrc.filter(o => o && String(o.label != null ? o.label : (o.name != null ? o.name : '')) !== '')
           .map(o => ({ label: String(o.label != null ? o.label : (o.name != null ? o.name : '')), value: o.value !== undefined ? o.value : (o.id !== undefined ? o.id : o.code) })) }; });
@@ -106,9 +111,11 @@ return (async () => {
 
   // ---------- 重复块按钮（「添加」/「删除本条」是行管理，不是提交） ----------
   const SUBMIT_RE = /提交|投递|申请并|确认|发送|支付|删除全部|下一步|完成|submit|apply now|send|confirm|pay/i;
+  // 双语站（如宝洁 recruit.pg.com.cn）按钮文案是「添加 / Add」「删除本条 / Delete item」→ 去掉尾随英文再比对
+  const btnCn = e => (e.textContent || '').replace(/\s*[/｜|]\s*[A-Za-z].*$/, '').trim();
   function blockRootOf(blockId) { const m = model.find(x => x.blockId === blockId); const el = m && m.dom; return el ? el.closest('[class*="apply-block-"]') : null; }
   function clickAdd(blockId, n) { const br = blockRootOf(blockId); if (!br) return { ok: false, why: '找不到区块 ' + blockId, n: 0 };
-    const btn = [...br.querySelectorAll('button')].find(e => (e.textContent || '').trim() === '添加' && !SUBMIT_RE.test(e.textContent || ''));
+    const btn = [...br.querySelectorAll('button')].find(e => btnCn(e) === '添加' && !SUBMIT_RE.test(e.textContent || ''));
     if (!btn) return { ok: false, why: '找不到「添加」按钮', n: 0 };
     let done = 0;
     for (; done < n; done++) { if (timeExpired()) return { ok: done > 0, n: done, incomplete: true }; btn.click(); }
@@ -117,7 +124,7 @@ return (async () => {
     let done = 0;
     for (; done < n; done++) {
       if (timeExpired()) return { ok: done > 0, n: done, incomplete: true };
-      const btns = [...br.querySelectorAll('button')].filter(e => (e.textContent || '').trim() === '删除本条');
+      const btns = [...br.querySelectorAll('button')].filter(e => btnCn(e) === '删除本条');
       if (!btns.length) return { ok: done > 0, why: '第 ' + (done + 1) + ' 次找不到「删除本条」', n: done };
       btns[btns.length - 1].scrollIntoView({ block: 'center' });
       btns[btns.length - 1].click();
@@ -241,7 +248,7 @@ return (async () => {
     const filled = before !== null && before !== '' && !(Array.isArray(before) && !before.length);
     if (st.onlyIfEmpty && filled) { results.push({ ...st, ok: true, kept: true, label: m.label, occ: m.occ, after: before }); continue; }
 
-    let payload = st.v, note = '';
+    let payload = st.v, note = '', optCandidates = null;
     const isDate = /date_info|day_info/.test(m.type);
     if (m.type === 'bool_info') {
       const o = m.opts.find(x => String(x.label) === String(st.v)) || m.opts.find(x => norm(x.label) === norm(st.v));
@@ -249,21 +256,32 @@ return (async () => {
       payload = o.value; note = 'bool→' + JSON.stringify(o.value);
     } else if (isDate && /^\d{4}-\d{1,2}(-\d{1,2})?$/.test(String(st.v))) {
       payload = st.v; note = 'date直写';
-    } else if (m.opts.length) {
+    } else if (/select|bool|cascader|radio|checkbox|location|tree/i.test(m.type) && m.opts.length) {
       // 选项闸门：只认「原文相等」或「归一化相等」，包含/近义一律拒绝（上层去问用户）
       const o = m.opts.find(x => String(x.label) === String(st.v)) || m.opts.find(x => norm(x.label) === norm(st.v));
       if (!o) { results.push({ ...st, ok: false, label: m.label, why: '选项里没有该值（不猜）', opts: m.opts.map(x => x.label).slice(0, 30) }); continue; }
-      payload = o.value; note = '选项→' + JSON.stringify(o.value);
+      // ⚠️ 2026-09-24 虎牙实测：select 真实点选后 store 存的是**标签原文**；`_set_(option.value)`（如 性别→0）会
+      // 「假成功」——display-value 为空、还残留「这是必填项」→ 表单级报错。所以 label 优先，value 只作回退。
+      optCandidates = [String(o.label)];
+      if (o.value !== undefined && String(o.value) !== String(o.label)) optCandidates.push(o.value);
+      payload = optCandidates[0]; note = '选项→label 优先';
     } else {
       payload = st.v; note = '文本直写';
     }
-    const after = safe(() => { m.p._set_(payload); return m.p._get_(); });
-    safe(() => m.p._validate_ && m.p._validate_());
-    await sleep(STEP);
-    const domVal = m.dom ? ((m.dom.querySelector('[class*="display-value"]') || {}).textContent || (m.dom.querySelector('input,textarea') || {}).value || '').trim() : '';
     const want = String(Array.isArray(st.v) ? st.v.join(',') : st.v);
-    const got = typeof after === 'object' && after ? JSON.stringify(after) : String(after);
-    const ok = got.indexOf(want) >= 0 || domVal.indexOf(want) >= 0 || got === want || !!st.force;
+    let attempt = 0, after = null, got = '', domVal = '', ok = false;
+    while (true) {
+      after = safe(() => { m.p._set_(payload); return m.p._get_(); });
+      await sleep(STEP);
+      domVal = m.dom ? ((m.dom.querySelector('[class*="display-value"]') || {}).textContent || (m.dom.querySelector('input,textarea') || {}).value || '').trim() : '';
+      got = typeof after === 'object' && after ? JSON.stringify(after) : String(after);
+      ok = got.indexOf(want) >= 0 || domVal.indexOf(want) >= 0 || got === want || !!st.force;
+      if (ok || !optCandidates || ++attempt >= optCandidates.length) break;
+      payload = optCandidates[attempt]; note = '选项→回退 value ' + JSON.stringify(payload);
+    }
+    // 程序写入后 DOM 常残留「这是必填项」：_validate_() 单独调会抛 textJoinI18nPolyglot，改用 focus→input→blur 让组件自校验
+    if (ok && m.dom) { const fi = m.dom.querySelector('input:not([readonly]),textarea');
+      if (fi) safe(() => { fi.focus(); fi.dispatchEvent(new Event('input', { bubbles: true })); fi.dispatchEvent(new FocusEvent('blur', { bubbles: true })); fi.blur(); }); }
     if (!ok && timeExpired()) {
       budgetExceeded = true;                        // 写入后预算用尽且回读不一致：下一批重设同一值（幂等）
       deferred.push(st);
@@ -275,6 +293,9 @@ return (async () => {
   return {
     mode: 'fill', url: location.href, wrote: results.filter(r => r.ok).length,
     bad: results.filter(r => !r.ok).length, results, deferred, budgetExceeded,
-    elapsedMs: Date.now() - startedAt, requiredErrors: requiredErrors()
+    elapsedMs: Date.now() - startedAt,
+    // 20 行大表上 requiredErrors() 会对每个字段块读 innerText（同步 layout），一趟要几百秒
+    // → CONFIG.skipRequiredErrors 时跳过，改由末尾单独一次廉价扫描（[class*=Input-message]）
+    requiredErrors: CONFIG.skipRequiredErrors ? null : requiredErrors()
   };
 })();

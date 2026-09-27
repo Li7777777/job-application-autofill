@@ -144,7 +144,7 @@ def main():
     check("有非空 description", bool(keys.get("description")))
     check("description ≤1024 字符", len(keys.get("description") or "") <= 1024)
 
-    print("7) 平台配置漂移守卫 + JS 语法（脚本内嵌的框架选择器必须与 assets/platform-selectors.json 一致）")
+    print("7) 平台配置漂移守卫 + JS 语法 + 交付契约守卫（MCP 批次 / 日期组件优先 / e2e 夹具）")
     asset = json.load(open(os.path.join(REPO, "assets", "platform-selectors.json"), encoding="utf-8"))
 
     def embedded_platform(path):
@@ -190,6 +190,16 @@ def main():
     check("MCP 填充超时返回 deferred 而不是假装失败", "deferred" in fill_source and "budgetExceeded" in fill_source)
     check("组件 API 填充器同样支持短批次续跑", "maxRunMs" in fiber_source and "deferred" in fiber_source)
     check("文档默认 browseros-neo MCP、CDP 只做备用", "MCP-first" in skill_source and "MCP first" in readme_source)
+    # 日期输入顺序守卫：有日期组件/只读框先走组件面板，文本直写只做回退（行为由 browser_e2e 真机验证）
+    check("日期组件识别表存在（有控件先用组件）",
+          "DATE_COMPONENT_SEL" in fill_source and "dateComponentOf" in fill_source)
+    check("日期组件面板先于文本直写（componentFirst 分支在前）",
+          "if (componentFirst) {" in fill_source and "const directR = await byDirect(null)" in fill_source
+          and fill_source.index("if (componentFirst) {") < fill_source.index("const directR = await byDirect(null)"))
+    fixture_source = open(os.path.join(REPO, "tests", "fixtures", "form-lab.html"), encoding="utf-8").read()
+    check("e2e 合成表单覆盖可写日期组件路径",
+          'id="birthYm"' in fixture_source and 'class="ant-picker"' in fixture_source
+          and "__dateWrites" in fixture_source)
 
     print("8) 标签归一化与选项打分（选项匹配只出建议）")
     check("norm_label 去「（必填）」", jaa_lib.norm_label("毕业时间（必填）") == jaa_lib.norm_label("毕业时间"))

@@ -1,9 +1,9 @@
 ---
 name: job-application-autofill
 description: 面向简历投递 / 校招网申的自动填表 skill（站点无关）。给定用户提供的招聘网站或申请页链接：扫描表单与必填项（含区块/多段经历/组件框架识别）→ 上传简历触发解析预填 → 用画像与记忆编译字段映射（选项对不上一律只出建议）→ 用站点内置组件（自定义下拉、级联、日期日历、文件上传）自动填入 → 程序化校验后交用户审核；并把「字段名→取值」持续沉淀成可复用的问答记忆、选项对照与站点记忆，下次投递越用越快。内置 antd/ElementUI/ATSX/Moka/北森/Hotjob/飞书 七大 ATS 框架的控件与日历配方。遇到不确定一律问用户、绝不猜测，且**绝不代替用户提交**。当用户要投简历、填网申/校招申请表/报名/登记表/求职申请，或给出 URL 说「帮我填一下」「帮我投」时使用。
-version: 1.3.0
+version: 1.4.0
 metadata:
-  verified_sites: "app.mokahr.com（自定义组件重型表单，React16 fiber 直写）、recruit.sinovatio.com（Vue2+Vuetify2，组件 formData 直读）、recruit.inovance.com（react-aria）、wecruit.hotjob.cn（Hotjob）、sokon.zhiye.com / cxmt.zhiye.com / coamc.zhiye.com / zhaopin.chnenergy.com.cn（北森 zhiye 系）、career.honor.com、selenium web-form（原生控件全类型）"
+  verified_sites: "app.mokahr.com（自定义组件重型表单，React16 fiber 直写；含景嘉微/虎牙实现）、recruit.pg.com.cn（Moka 自建域名，sd-* 组件 + 双语按钮）、recruit.sinovatio.com（Vue2+Vuetify2，组件 formData 直读）、recruit.inovance.com（react-aria）、wecruit.hotjob.cn（Hotjob）、sokon.zhiye.com / cxmt.zhiye.com / coamc.zhiye.com / zhaopin.chnenergy.com.cn（北森 zhiye 系）、i.zhaopin.com（Vue2+iView 在线简历）、www.zhipin.com（自研 Vue2 组件库）、zhaopin.yaoji.cn（aPaaS + shadcn/ui Radix，fiber 组件 API）、job.chinatelecom.com.cn（大易 WinTalent）、career.honor.com、selenium web-form（原生控件全类型）"
   data_dir: "<运行环境>/data（skill 安装目录下，已 gitignore）；可用 $JAA_DATA_DIR 覆盖"
   leak_guard: "scripts/95_lint_notes.py + tests/selftest.py 第 11 组：拿 data/profile.json 里真实取值当黑名单扫可发布文件；jaa-leak-allow 可豁免站点公开选项表"
   framework_recipes: "antd / element(ElementUI+Plus) / atsx / mokahr / beisen / hotjob / feishu"
@@ -248,7 +248,8 @@ MAPPING 的值可以是字符串，也可以是带指令的对象：
 
 > **时间粒度**：画像只存最细的（`birth_date: 1999-09-15`），年月/年份粒度的组件自动截断，
 > 并在 `detail` 里注明丢了哪一级；反过来要求更细时进 todo（`date-granularity`）而不是编造。
-> 详见 `references/component-recipes.md §3`。
+> **填入顺序**：识别到日期组件（或只读日期框）就先走组件面板（年→月→日）再回读，只有组件不可用/面板打不开才回退文本直写；
+> 详见 `references/component-recipes.md §3、§12`。
 
 ### ⑦ 程序校验 + 交给用户审核
 ```text
@@ -318,7 +319,7 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 
 **已验证可用**：`input/textarea/select/checkbox/radio`、`type=date/month/color/range`、
 自定义下拉（`role=combobox`、antd、Element、mokahr `sd-Select`、ATSX、北森 phoenix、飞书 `ud__select`）、
-只读日期框弹出的日历面板（8 套内置预设）、级联/树形下拉（按 `/` 拆级逐级精确命中）、
+只读/可写日期组件弹出的日历面板（8 套内置预设；**有组件先走组件面板**，面板不通才回退文本直写）、级联/树形下拉（按 `/` 拆级逐级精确命中）、
 `contenteditable` 富文本、文件上传（配合 upload 工具）。
 
 **新增可用（1.1.0）**：
@@ -357,6 +358,9 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 | 必填判定 | 星号在字段块里，不在控件上 | 扫描器做「字段块 + 星号/必填字样 + 框架信号（`.ant-form-item-required` / `.el-form-item.is-required`）」三级判定，标注 `requiredConfidence`；medium/low 一律列进 todo 让人工确认 |
 | 字段名带噪声 | 「毕业时间（必填）」匹配不上字典 | 扫描器同时给 `label`（给人看）与 `labelNorm`（去噪声）；字典/记忆一律走 `labelNorm` |
 | 合成 click 假成功（radio/React 受控组件） | `r.click()` 后 `checked=true`、回读也有值，**但没进 React store**——页面一重渲染勾选就丢 | radio/开关优先用 MCP `act` 真实点击；MCP 明确失败才用 `cdp.mjs revalclick/clickn`；填完后再做一次重渲染后回读。 |
+| **select 直写 `option.value` 假成功**（mokahr 实测） | store 里确实有值（如 `0`），但 `display-value` 为空、字段残留「这是必填项」，整表报「申请表含有错误」——而**真实点选后 store 存的是选项标签原文** | `25_mokahr_fiber.js` 已改成「**label 优先写**，回读不符才回退 `option.value`」（多数情况下 label 直写即可，不必开面板）；仍失败就回到真实点击。**表单级唯一权威判据 = 提交按钮文案**（只读不点） |
+| `_validate_()` 单独调抛 `textJoinI18nPolyglot` | 程序写入后想手动清报错，结果异常 | 它依赖渲染期上下文；改用 `focus → dispatch input → blur`（或任意一次真实点击）让组件自校验 |
+| 选项叶子采不到 | 面板明明开着，`children.length===0` 却筛出 0 项 | 叶子自带一个**空子 span**（选中态标记）→ 改成「精确文本 + 子节点数升序取第一个」 |
 | uid 漂移/丢失 | 加删块、翻区块后旧 `[data-jaa-uid]` 找不到，或同 uid 出现双元素 | 结构一变就重扫；填充脚本写完立即回读（`value === 目标值 ? OK : MISMATCH`）；定位优先用 aria-label/placeholder 等结构属性，uid 只作短生命周期句柄 |
 | 找按钮误点其他区块 | 「找『+ 添加一项』向上爬容器」会爬到区块共享祖先，点到**别的区块**的添加按钮（实测误加 2 个教育块） | 按钮查找限定在目标区块容器内（`h2 → closest(区块容器)` 的后代），爬层上限 ≤8 且逐层校验容器归属 |
 | MCP act 报 covered | `Element is covered by header.fixed / div.absolute`（sticky 底栏、日期组透明覆盖层盖住目标） | 这是保护不是故障：先用 MCP `act scroll` 让目标居中，再重试；只有 MCP 仍不能操作时才用 CDP。 |

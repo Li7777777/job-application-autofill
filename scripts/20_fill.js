@@ -14,6 +14,8 @@
 //   · 原生 setter（React/Vue 受控组件）＋ per-char 模拟输入 ＋ contenteditable
 //   · 7 大组件框架（antd/ElementUI/Moka/北森/Hotjob/ATSX/飞书）的下拉开合与选项采集
 //   · 日期面板预设（年/月/日导航 + 月名别名 + 十年级翻页）
+//   · 日期字段「有控件先用组件」：识别到日历组件就开面板选（年→月→日）再回读校验，
+//     只有没有组件 / 面板打不开时才回退文本直写（直写对受控组件常常只是显示层假成功）
 //   · 弹层可见性过滤 + 非弹层黑名单（tooltip/日期面板等）
 // 配套：assets/platform-selectors.json（本文件内嵌其「选择器+日期预设」部分，见 tests/selftest.py 漂移守卫）
 //
@@ -178,6 +180,24 @@ const componentGranularity = el => {
     .filter(Boolean).join(' ');
   if (!hint) return null;
   for (const [g, pats] of GRAN_PATTERNS) for (const re of pats) if (re.test(hint)) return g;
+  return null;
+};
+
+// 日期组件的容器特征：antd / ElementUI / iView / ATSX / 飞书 / fusion / mokahr / 通用 picker 类。
+// 为什么要单独识别：这些控件的日历面板才是「组件写法」；只把文本写进它们的输入框，
+// 在受控组件里可能只是显示层成功（store 没认）→ 后续站点校验照样报必填。
+const DATE_COMPONENT_SEL = [
+  '.ant-picker', '.ant-calendar-picker', '.ant-calendar-range-picker',
+  '.el-date-editor', '.el-range-editor', '.el-date-picker',
+  '.ivu-date-picker', '.atsx-date-picker', '.ud__picker', '.next-date-picker',
+  '.sd-DatePicker', '.throne-biz-date-range-picker',
+  '[class*="datepicker"]', '[class*="date-picker"]', '[class*="datePicker"]',
+  '[class*="DatePicker"]', '[class*="date_info"]', '[class*="day_info"]',
+  '[class*="basic-selector-year"]', '[class*="basic-selector-month"]',
+  '[class*="picker-date"]', '[class*="PickerDate"]'
+].join(', ');
+const dateComponentOf = el => {
+  try { const c = el.closest(DATE_COMPONENT_SEL); if (c) return c; } catch (e) {}
   return null;
 };
 
@@ -644,8 +664,7 @@ const presetCandidates = el => {
   return out;
 };
 
-const openDatePanel = async (el, cfg) => {
-  await clickReal(el, 10);
+const openDatePanel = async (el, cfg, waitMs) => {
   const probe = () => {
     for (const k of PRESET_KEYS) {
       const s = cfg[k];
@@ -654,7 +673,19 @@ const openDatePanel = async (el, cfg) => {
     }
     return !!nearestPanel(el, PANEL_ROOT_SEL);
   };
-  await waitFor(probe, Math.ceil(OPTS.panelTimeoutMs / OPTS.panelWaitMs), OPTS.panelWaitMs);
+  const budgetMs = Number(waitMs) > 0 ? Number(waitMs) : OPTS.panelTimeoutMs;
+  const tries = Math.max(2, Math.ceil(budgetMs / OPTS.panelWaitMs));
+  // 点击目标顺序：输入框 → 组件根（antd/Element 的 wrapper）→ 框架触发元素。
+  // 打开成功即提前返回，不会为后续目标多花时间；全部失败才走满 waitMs 预算。
+  const targets = [];
+  const push = t => { if (t && !targets.includes(t)) targets.push(t); };
+  push(el);
+  push(dateComponentOf(el));
+  push(triggerOf(el, cfg));
+  for (const t of targets) {
+    await clickReal(t, 10);
+    if (await waitFor(probe, tries, OPTS.panelWaitMs)) break;
+  }
   // 面板根：优先用预设选择器附近的可见弹层
   const anchors = [];
   for (const k of PRESET_KEYS) {
@@ -901,6 +932,8 @@ const fillCascader = async (el, want, cfg) => {
 
 // 时间粒度自适应：画像存最细的，组件要多粗填多粗；组件要得更细就如实失败（绝不补精度）。
 // wantGran 是 mapping 里带的提示（canonical 声明的粒度），优先级低于组件自身的判定。
+// 填入顺序：原生控件值 setter → 有日期组件/只读 → 组件面板（年→月→日）→ 回读校验后
+// 才允许回退文本直写；没有组件信号的普通文本框保持「直写优先」的快路径。
 const fillDate = async (el, want, cfg, wantGran) => {
   const type = (el.getAttribute('type') || '').toLowerCase();
   if (type === 'time') return { ok: false, detail: '纯时间控件不在本 skill 范围' };
@@ -922,53 +955,84 @@ const fillDate = async (el, want, cfg, wantGran) => {
     return { ok: false, detail: `回读为「${now}」，与目标「${use}」不符${extra ? '（' + extra + '）' : ''}` };
   };
 
-  // ① 原生 input[type=month|week|date|datetime-local]
-  if (type === 'month' || type === 'week' || type === 'date' || type === 'datetime-local') {
-    await setNative(el, use);
+  // —— 组件面板路径：有日历控件就用组件交互（年→月→日），这是「组件写法」的正路 ——
+  const byPanel = async (waitMs) => {
+    let panel = await openDatePanel(el, UNION_DATE_PRESET, waitMs);
+    if (!panel) return { ok: false, detail: '点击后没有出现可识别的日期面板 → 需要 adapter' };
+    // 用「哪个预置的选择器真的出现在这个面板上」来选预置，而不是只信字段的框架标签
+    const cands = presetCandidates(el).map(n => ({ n, s: presetScore(panel, n) })).sort((a, b) => b.s - a.s);
+    const tried = [];
+    let achieved = null, used = null;
+    for (const c of cands.slice(0, 3)) {
+      if (c.s === 0 && tried.length) break;        // 完全不匹配的不再试
+      const got = await calendarPick(panel, use, c.n, target);
+      if (got) { achieved = got; used = c.n; break; }
+      tried.push(c.n + '(' + c.s + ')');
+      if (cands.filter(x => x.s > 0).length > tried.length) {
+        // 上一次可能点到一半 → 关掉重开，避免半途状态干扰下一个预置
+        await closeOverlays();
+        const p2 = await openDatePanel(el, UNION_DATE_PRESET, waitMs);
+        if (!p2) break;
+        panel = p2;
+      }
+    }
+    if (!achieved) {
+      await closeOverlays();
+      return { ok: false, detail: `日历面板里找不到 ${use}（试过预置：${tried.join(' / ') || '无可用预置'}；不按「最近可用日」猜）` };
+    }
     await sleep(OPTS.verifyDelayMs);
-    return verify(use, `原生 ${type}`);
-  }
-  // ② 可写的文本框 → 先按目标粒度直写，不行再试其它粒度
-  if (!el.readOnly && (type === 'text' || type === '')) {
+    const r = verify(use, `预置 ${used}，日历走到 ${achieved}`);
+    if (r.ok && achieved !== target) {
+      r.note += `；⚠️ 日历只支持到「${achieved}」，「${target}」级的位没能填`;
+    }
+    return r;
+  };
+
+  // —— 文本直写路径：按目标粒度写，不行再试其它粒度 ——
+  const byDirect = async (viaNote) => {
+    if (el.readOnly || !(type === 'text' || type === '')) return null;
     for (const v of [use, ...dateVariants(want).filter(x => x !== use)]) {
       await setNative(el, v);
       await sleep(OPTS.verifyDelayMs);
       const a = dateDigits(readDisplay(el)), b = dateDigits(v);
       if (a && b && Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a))) {
-        return { ok: true, note: `→ ${readDisplay(el)}${dropNote(dateGranularityOf(readDisplay(el)))}（直写 ${v}）`, truncated: dateGranularityOf(readDisplay(el)) !== have };
+        return { ok: true, note: `→ ${readDisplay(el)}${dropNote(dateGranularityOf(readDisplay(el)))}（直写 ${v}${viaNote ? '，' + viaNote : ''}）`, truncated: dateGranularityOf(readDisplay(el)) !== have };
       }
     }
+    return { ok: false, detail: '文本直写后回读不符' };
+  };
+
+  // ① 原生 input[type=month|week|date|datetime-local]：
+  //    浏览器原生控件的组件 API 就是值 setter + input/change（showPicker() 需要用户手势，脚本里点不出日历）
+  if (type === 'month' || type === 'week' || type === 'date' || type === 'datetime-local') {
+    await setNative(el, use);
+    await sleep(OPTS.verifyDelayMs);
+    return verify(use, `原生 ${type}`);
   }
-  // ③ 只读 / 自有面板：走日历引擎
-  let panel = await openDatePanel(el, UNION_DATE_PRESET);
-  if (!panel) return { ok: false, detail: '点击后没有出现可识别的日期面板 → 需要 adapter' };
-  // 用「哪个预置的选择器真的出现在这个面板上」来选预置，而不是只信字段的框架标签
-  const cands = presetCandidates(el).map(n => ({ n, s: presetScore(panel, n) })).sort((a, b) => b.s - a.s);
-  const tried = [];
-  let achieved = null, used = null;
-  for (const c of cands.slice(0, 3)) {
-    if (c.s === 0 && tried.length) break;          // 完全不匹配的不再试
-    const got = await calendarPick(panel, use, c.n, target);
-    if (got) { achieved = got; used = c.n; break; }
-    tried.push(c.n + '(' + c.s + ')');
-    if (cands.filter(x => x.s > 0).length > tried.length) {
-      // 上一次可能点到一半 → 关掉重开，避免半途状态干扰下一个预置
-      await closeOverlays();
-      const p2 = await openDatePanel(el, UNION_DATE_PRESET);
-      if (!p2) break;
-      panel = p2;
-    }
+
+  const kind = el.getAttribute('data-jaa-kind') || '';
+  const component = dateComponentOf(el);
+  // 「存在日期控件」= 组件根特征 / 只读（只能靠面板）/ 扫描器判成日期区间。
+  // 其余可写文本框（仅占位符像日期）保持直写优先，避免每个普通年月框都白等面板超时。
+  const componentFirst = !!component || el.readOnly || kind === 'date-range';
+
+  if (componentFirst) {
+    const panelR = await byPanel(component ? OPTS.panelTimeoutMs : Math.min(OPTS.panelTimeoutMs, 600));
+    if (panelR.ok) return panelR;
+    const directR = await byDirect('组件面板未成功');
+    if (directR && directR.ok) return directR;
+    if (directR) return { ok: false, detail: `组件面板未成功（${panelR.detail}），直写文本也未通过回读（${directR.detail}）` };
+    return panelR;
   }
-  if (!achieved) {
-    await closeOverlays();
-    return { ok: false, detail: `日历面板里找不到 ${use}（试过预置：${tried.join(' / ') || '无可用预置'}；不按「最近可用日」猜）` };
-  }
-  await sleep(OPTS.verifyDelayMs);
-  const r = verify(use, `预置 ${used}，日历走到 ${achieved}`);
-  if (r.ok && achieved !== target) {
-    r.note += `；⚠️ 日历只支持到「${achieved}」，「${target}」级的位没能填`;
-  }
-  return r;
+
+  // ② 纯文本框：直写优先（快路径，保持原速度）
+  const directR = await byDirect(null);
+  if (directR && directR.ok) return directR;
+
+  // ③ 直写不行 → 最后再试组件面板（可能是识别漏了的组件）
+  const panelR = await byPanel(OPTS.panelTimeoutMs);
+  if (panelR.ok) return panelR;
+  return directR || panelR;
 };
 
 // 复合「年+月」分片控件：在同一字段块内按 DOM 顺序取 2 或 4 个分片
