@@ -25,7 +25,7 @@
 | 语言水平 / 得物经历问答 / 描述 | `textarea` | 同上（用 textarea 的 setter） |
 | 性别 / 是否接受调换工作地点 / 是否已上传作品集 / 获知渠道 | `ud__select`（只读搜索框） | fiber 往上找带 `onChange`+`options` 的 props，`onChange(opt.value, opt)`；值形如 `"1"/"2"/"3"`，回读 `.ud__select` 文本 |
 | 期望工作地点 | `ud__select` + TreeSelect（`citySelectWrapper__*`，约 1 万项，multiple+treeCheckable） | 值 = 城市码字符串数组（省 `ST_*` / 市 `CT_*` / 区 `DS_*`）；面板里先在搜索框写城市名过滤，再点 `.ud__tree__node__label` 所在行的 checkbox；或直接 `onChange(['CT_<市码>'])` |
-| 起止时间（教育/实习/项目） | `throne-biz-date-range-picker`（两个 input） | 解析器可直接写入；手填时走面板 |
+| 起止时间（教育/实习/项目） | `throne-biz-date-range-picker`（两个可写 input） | **可以键入**：原生 setter 写 `YYYY-MM` + `keydown Enter` + `change` + `blur` 就会进 store（起=`"2026-03"`，止=真实月或 `"-"`，「至今」直接往第二个 input 键入 `至今` 即可）；与下面的获奖年控件行为不同 |
 | 获奖时间 | `ud__picker`，`placeholder = YYYY`（**只到年**） | **键入不提交**：必须从 input 的 fiber 往上找 `picker==='year' \|\| mode==='year'` 的 props，`onChange(new Date(y,0,1), 'YYYY')` |
 | 简历附件 | 隐藏 `input[type=file]` | 显形 + `aria-label` → MCP `upload`；成功后出现「将简历内容解析到下方表单？ 解析并覆盖」 |
 | 重复块「添加」 | `button` 文本 `添加` | 合成 `click()` 有效（区块内定位，见踩坑 4） |
@@ -44,7 +44,17 @@ p.onChange(opt.value, opt);
 ```
 
 ```js
-// 年份粒度日期控件（placeholder=YYYY）：键入无效，走组件 onChange(Date)
+// 起止时间（月粒度区间）：键入 + Enter 就能提交，可以整批循环
+const iS = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+const type = (inp, v) => { inp.focus(); iS.call(inp, v); inp.dispatchEvent(new Event('input', { bubbles: true }));
+  inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+  inp.dispatchEvent(new Event('change', { bubbles: true })); inp.blur(); };
+type(startInput, '<YYYY-MM>');  await new Promise(r => setTimeout(r, 220));
+type(endInput, '至今');           // 或 '<YYYY-MM>'
+```
+
+```js
+// 年份粒度日期控件（placeholder=YYYY）：键入不进 store，走组件 onChange(Date)
 let n = input[fkey(input)], dp = null;
 for (let d = 0; n && d < 14; d++, n = n.return) { const q = n.memoizedProps;
   if (q && typeof q.onChange === 'function' && (q.picker === 'year' || q.mode === 'year')) { dp = q; break } }
@@ -71,6 +81,9 @@ const leaf = [...box.querySelectorAll('.ud-formily-item')]
   证件号码 / 预计毕业月份 / 获知渠道（教育区块：学校 / 学历 / 二级学院 / 专业 / 起止时间）。
 - `手机号码` 由账号预填（只读展示 `<+86> <手机号>`），`form.values.basic_info.mobile` 里已有值。
 - **agent 一律不点「完成」**（它是保存/提交类按钮，被 `SUBMIT_RE` 拦下）；交用户自己点。
+  ⚠️ 首次保存之后，底部按钮文案会变成 **「取消 / 保存」**（不再是「完成」）；按铁律要交用户点，
+  只有用户明确授权代点时才点「保存」，并在交付说明里写清楚点了什么、什么时候（`/resume/view` 的
+  「最近更新」时间戳就是保存成功的证据）。
 - `form.errors === []` 且必填都有值 = 通过。
 
 ## 踩坑记录
@@ -91,7 +104,10 @@ const leaf = [...box.querySelectorAll('.ud-formily-item')]
    屏幕外），此时 `act click_at` 点不到 → 打开面板后**不要再滚容器**；或改走组件 `onChange`。
 7. `绩点` 是 `ud__input-number`，**存不下分制**（画像 `<GPA>/5` 只能写成数字 `<GPA>`），
    且会把 `3.96/5` 截成 `3.96`；交审时要说明这一处信息损失。
-8. 简历解析会把「项目名称」和「技术栈 / 仓库路径」拼在一起（`<项目名> <repo> - <技术栈>`），
+8. **重复块一次 evaluate 里循环点「添加」+ 循环写值容易超时**（单次 cdp/evaluate 约 30s）：
+   先单独一轮把行数加够（添加 13 次约 5s），再**按 5~6 行一批**写日期；每批开头先比对现有值再写，
+   重跑就是幂等的，不会因为超时留下半成品。
+9. 简历解析会把「项目名称」和「技术栈 / 仓库路径」拼在一起（`<项目名> <repo> - <技术栈>`），
    第二个项目的技术栈被塞进「项目角色」。→ 属解析结果，**必须让用户核对**，代理不擅自改写。
 
 ## 复用流程（下次同站投递，约 5–8 分钟）
@@ -99,9 +115,13 @@ const leaf = [...box.querySelectorAll('.ud-formily-item')]
 2. 显形隐藏 file input + `aria-label` → `snapshot` → `upload` 简历 → `wait(for="text", value="解析并覆盖")`。
 3. **MCP `act click_at` 真实点「解析并覆盖」**（别用合成事件）→ 等「解析成功」。
 4. 一轮 evaluate：补齐文本/多行字段 + 单选下拉 `onChange` + 城市 `onChange(['CT_<市码>'])` + 项目链接。
-5. 获奖等重复块：区块内点「添加」补行数 → 用**叶子项**写法逐行写 → 年份走日期组件 `onChange`。
+5. 重复块（项目 / 获奖）：**先单独一轮把行数点够**（`添加` 可循环，每行 ~400ms），再按 5~6 行
+   一批写值；一律用**叶子项**定位；项目起止时间用键入+Enter（配方），获奖年份走组件 `onChange(Date)`。
 6. `10_scan_form.js` / `15_dump_state.js` 导出 + 读 formily `values/errors` 对账（`errors` 必须为空）。
-7. 交用户核对 → **由用户点「完成」保存/提交**（agent 不点）。
+7. 交用户核对 → **由用户点「完成」/「保存」**（agent 不点，除非用户明确授权）。
+
+> 已保存过的简历再进 `/resume/edit` 会把**服务端数据载回来**（附件区显示「上次上传」），
+> 所以在同一页追加内容不会重复建简历；但未保存前标签页被关掉 = 全部丢失。
 
 ## 本站选项对照（公开选项，代理照抄即可）
 - 性别：`<男/女/保密>`（值 1/2/3） <!-- jaa-leak-allow -->
