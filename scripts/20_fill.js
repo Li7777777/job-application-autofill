@@ -1,14 +1,17 @@
 // scripts/20_fill.js —— 通用表单填充器（与站点无关，靠 10_scan_form.js 打的 data-jaa-* 标记定位）
 // 默认运行在 browseros-neo_evaluate 中；每次调用都必须是可续跑的短批次。
 // 用法：改好 MAPPING 后整段粘进 browseros-neo_evaluate(page=<id>, timeout=25000)
-//   返回 { ok, skipped, failed, suggestions, probed, deferred, notes, log }
+//   返回 { ok, skipped, failed, suggestions, probed, deferred, notes, needsReview, log }
 //   ok / skipped / failed / suggestions / deferred 都是 {uid,label,value,detail}
+//   needsReview 汇总 mapping 里标了 review 的暂定字段（status: filled/already-matched/failed），
+//   供填充完成后一次性交给用户集中确认；本脚本不会中途提问。
 //
 // 铁律：
 //   * 只写表单字段，**绝不点击提交/发送/投递类按钮**（SUBMIT_RE 拦截）
-//   * 不确定就报 failed + 给出 suggestions，让上层去问用户，不做猜测式点击
+//   * 写不进 / 找不到目标选项就报 failed + suggestions，由上层汇总后集中确认，不做猜测式点击
 //   * 每个字段写后回读校验；已是目标值的跳过（幂等）
-//   * 选项匹配只认「精确」与「归一化后相等」，**包含/近义一律只给建议不落笔**
+//   * 选项匹配只认「精确」与「归一化后相等」；经验判断发生在 40_build_mapping.py
+//     （它把唯一且相似度 ≥0.60 的候选换成**页面原文**并标 review），本脚本仍不自己猜选项
 //
 // 设计来源：逆向「牛客网申助手」的填表链路并重写：
 //   · 原生 setter（React/Vue 受控组件）＋ per-char 模拟输入 ＋ contenteditable
@@ -1151,7 +1154,7 @@ return (async () => {
 
   const entries = Object.entries(MAPPING).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(typeof v === 'object' && (v.v === undefined || v.v === null || v.v === '')));
   // ⚠️ probeOptions 模式允许 MAPPING 为空（纯只读探测，不写任何字段）
-  if (!entries.length && !OPTS.probeOptions) return { ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes: ['MAPPING 为空：先跑 10_scan_form.js 拿 uid'], log };
+  if (!entries.length && !OPTS.probeOptions) return { ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes: ['MAPPING 为空：先跑 10_scan_form.js 拿 uid'], needsReview: [], log };
 
   // 解析目标元素 → 按 DOM 顺序处理（父级下拉/级联先于子级）
   const jobs = [];
@@ -1168,7 +1171,11 @@ return (async () => {
       if (exact.length) els = exact;
     }
     if (!els.length) { failed.push({ uid: key, label: key, value: want, detail: '找不到该字段（uid 过期？重新跑 10_scan_form.js）' }); continue; }
-    jobs.push({ key, want, mode, gran: granHint, el: els[0], uid: els[0].getAttribute('data-jaa-uid') || key });
+    jobs.push({ key, want, mode, gran: granHint, el: els[0], uid: els[0].getAttribute('data-jaa-uid') || key,
+                review: (typeof rawVal === 'object' && rawVal.review) ? {
+                  review: true, source: rawVal.source || null, confidence: rawVal.confidence || null,
+                  reviewReason: rawVal.reviewReason || 'mapping 标记为暂定值'
+                } : null });
   }
   jobs.sort((a, b) => {
     const p = a.el.compareDocumentPosition(b.el);
@@ -1186,7 +1193,7 @@ return (async () => {
     const section = el.getAttribute('data-jaa-section') || '';
     const block = el.getAttribute('data-jaa-block');
     const cfg = cfgFor(el);
-    const row = extra => Object.assign({ uid, label, value: want, section, block: block === null ? -1 : Number(block) }, extra || {});
+    const row = extra => Object.assign({ uid, label, value: want, section, block: block === null ? -1 : Number(block) }, job.review || {}, extra || {});
     const rec = (bucket, extra) => bucket.push(row(extra));
 
     try {
@@ -1352,8 +1359,12 @@ return (async () => {
     log.push(`probe: 控件 ${allProbeEls.length} 个 / 下拉组 ${groups.size} 组 / 实际打开 ${opened} / 缓存复用 ${cachedN} / 白名单跳过 ${skippedN}（缓存键 ${cacheTag}，重跑续用）`);
   }
 
+  const needsReview = [...ok, ...skipped, ...failed].filter(x => x.review).map(x => ({
+    uid: x.uid, label: x.label, value: x.value, source: x.source, confidence: x.confidence,
+    reviewReason: x.reviewReason, status: failed.includes(x) ? 'failed' : (skipped.includes(x) ? 'already-matched' : 'filled')
+  }));
   return {
-    ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes,
+    ok, skipped, failed, suggestions, probed, deferred, budgetExceeded, notes, needsReview,
     elapsedMs: Date.now() - startedAt,
     log: [
       `写入成功 ${ok.length} / 跳过 ${skipped.length} / 失败 ${failed.length}${OPTS.probeOptions ? ' / probe 模式' : ''}${budgetExceeded ? ' / 已达到 MCP 短批次预算，重跑续接' : ''}`,

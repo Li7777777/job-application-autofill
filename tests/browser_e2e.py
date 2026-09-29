@@ -175,6 +175,10 @@ def main():
         check("姓名 → 画像值", mval(uid_of("姓名")) == "测试用户", str(mp.get(uid_of("姓名"))))
         check("意向工作城市 → 画像值（选项精确命中）",
               mval(uid_of("意向工作城市")) == "北京市", str(mp.get(uid_of("意向工作城市"))))
+        # 注入一条合成复核标记，验证组件填充结果会把它带到最终复核摘要。
+        review_uid = uid_of("推荐码")
+        mp[review_uid] = {"v": mval(review_uid), "review": True, "source": "profile+test",
+                          "confidence": "medium", "reviewReason": "e2e 合成暂定值"}
         check("出生日期 → 画像值（带目标粒度提示）",
               mval(uid_of("出生日期 (年龄)")) == "1999-09-15"
               and (mp.get(uid_of("出生日期 (年龄)")) or {}).get("granularity"),
@@ -242,7 +246,10 @@ def main():
         filled_labels = ok_labels | {x["label"] for x in fill.get("skipped", [])}
         fail_msgs = {x["label"]: x.get("detail") for x in fill.get("failed", [])}
         check("填充返回 ok/skipped/failed/suggestions/deferred 与预算标记",
-              all(k in fill for k in ("ok", "skipped", "failed", "suggestions", "deferred", "budgetExceeded")))
+              all(k in fill for k in ("ok", "skipped", "failed", "suggestions", "deferred", "budgetExceeded", "needsReview")))
+        check("暂定 mapping 元数据传入最终复核摘要",
+              any(x.get("uid") == review_uid and x.get("reviewReason") == "e2e 合成暂定值"
+                  for x in fill.get("needsReview", [])), json.dumps(fill.get("needsReview"), ensure_ascii=False))
         check("自定义下拉「意向工作城市」填成功", "意向工作城市" in filled_labels, str(fail_msgs.get("意向工作城市")))
         check("自定义下拉「性别」填成功", "性别" in filled_labels, str(fail_msgs.get("性别")))
         check("只读日期框（日历年→月→日）填成功", "出生日期 (年龄)" in ok_labels, str(fail_msgs.get("出生日期 (年龄)")))

@@ -17,9 +17,13 @@
 //   python -c "import json,pathlib; s=pathlib.Path('scripts/25_mokahr_fiber.js').read_text(encoding='utf-8'); pathlib.Path('_run.js').write_text(s.replace('__CONFIG__', json.dumps({'mode':'dump'})), encoding='utf-8')"
 //
 // CONFIG 形状：
-//   { mode: 'dump' | 'fill' | 'store', stepDelayMs: 240, maxRunMs: 18000, maxSteps: 0, steps: [...] }
+//   { mode: 'dump' | 'fill' | 'store', stepDelayMs: 240, maxRunMs: 18000, maxSteps: 0, steps: [...],
+//     allowProvisional: true, strict: false }
 // maxRunMs/maxSteps 用于 browseros-neo 的短调用；返回 deferred 后，把它作为下一次 CONFIG.steps 续做。
 // 特别是 add/delLast 不能重放整个原 CONFIG，否则会重复增删记录。
+// allowProvisional（默认开）：页面无精确选项、但只有唯一足够相近项时，先暂选该页面选项原文，
+//   该行标 review 并汇总到返回值的 needsReview，由填充后的集中确认统一处理（不中途打扰用户）；
+//   并列 / 过弱（<0.60）/ 无候选仍不猜，该步计 failed 并留给最终确认；strict:true 关掉暂选。
 // steps 每项（按「区块 blockId + 字段 fid + 出现序号 occ」定位，不依赖 DOM uid，重渲染不失效）：
 //   {a:'set',     blockId:'basicInfo', fid:'gender',  occ:0, v:'男'}                 // select/bool/text/date 起始端
 //   {a:'daterow', blockId:'projectInfo', fid:'startDate', occ:0, start:'2026-03', end:'至今'|'2026-06'}
@@ -108,6 +112,32 @@ return (async () => {
     return hits[st.occ || 0] || (hits.length === 1 ? hits[0] : null); };
   const storeGet = (blockId, occ, key) => { const v = storeVals(); if (!v || v.__err) return undefined;
     const arr = v[blockId]; if (!Array.isArray(arr)) return undefined; const r = arr[occ] || {}; return key ? r[key] : r; };
+
+  // ---------- 低打扰暂选：唯一且足够相近的页面选项先选，汇总到最终确认 ----------
+  // 分数口径与 jaa_lib.py / 20_fill.js / 40_build_mapping.py 一致（tests/selftest.py 第 7 组有阈值漂移守卫）。
+  const REVIEW_OPTION_THRESHOLD = 0.60;
+  const PROVISIONAL = CONFIG.allowProvisional !== false && CONFIG.strict !== true;
+  const isSubseq = (short, long) => { let i = 0; for (const ch of long) { if (ch === short[i]) i++; } return i >= short.length; };
+  function optionScore(want, text) {
+    const w = String(want == null ? '' : want).trim(), o = String(text == null ? '' : text).trim();
+    if (!w || !o) return 0;
+    if (w === o) return 1;
+    const nw = norm(w), no = norm(o);
+    if (nw && nw === no) return 0.98;
+    if (nw && no && (nw.includes(no) || no.includes(nw))) return 0.5 + 0.3 * (Math.min(nw.length, no.length) / Math.max(nw.length, no.length));
+    if (nw && no && nw.length >= 2 && nw.length < no.length && isSubseq(nw, no)) return 0.45;
+    if (nw && no && no.length >= 2 && no.length < nw.length && isSubseq(no, nw)) return 0.4;
+    return 0;
+  }
+  // → 页面选项原文 {label, value, score}；并列 / 过弱 / 无候选一律 null（不猜，交最终确认）
+  function judgeOption(value, opts) {
+    const scored = (opts || []).map(o => ({ label: String(o.label), value: o.value, score: optionScore(value, o.label) }))
+      .filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+    if (!scored.length || scored[0].score < REVIEW_OPTION_THRESHOLD) return null;
+    if (scored.length > 1 && scored[1].score === scored[0].score) return null;
+    return scored[0];
+  }
+  const needsReview = [];
 
   // ---------- 重复块按钮（「添加」/「删除本条」是行管理，不是提交） ----------
   const SUBMIT_RE = /提交|投递|申请并|确认|发送|支付|删除全部|下一步|完成|submit|apply now|send|confirm|pay/i;
@@ -248,7 +278,7 @@ return (async () => {
     const filled = before !== null && before !== '' && !(Array.isArray(before) && !before.length);
     if (st.onlyIfEmpty && filled) { results.push({ ...st, ok: true, kept: true, label: m.label, occ: m.occ, after: before }); continue; }
 
-    let payload = st.v, note = '', optCandidates = null;
+    let payload = st.v, note = '', optCandidates = null, provisional = null;
     const isDate = /date_info|day_info/.test(m.type);
     if (m.type === 'bool_info') {
       const o = m.opts.find(x => String(x.label) === String(st.v)) || m.opts.find(x => norm(x.label) === norm(st.v));
@@ -257,14 +287,17 @@ return (async () => {
     } else if (isDate && /^\d{4}-\d{1,2}(-\d{1,2})?$/.test(String(st.v))) {
       payload = st.v; note = 'date直写';
     } else if (/select|bool|cascader|radio|checkbox|location|tree/i.test(m.type) && m.opts.length) {
-      // 选项闸门：只认「原文相等」或「归一化相等」，包含/近义一律拒绝（上层去问用户）
+      // 选项闸门：「原文相等 / 归一化相等」直接用；否则只在唯一且相似度 ≥阈值时暂选，并记进最终确认
       const o = m.opts.find(x => String(x.label) === String(st.v)) || m.opts.find(x => norm(x.label) === norm(st.v));
-      if (!o) { results.push({ ...st, ok: false, label: m.label, why: '选项里没有该值（不猜）', opts: m.opts.map(x => x.label).slice(0, 30) }); continue; }
+      const chosen = o || (PROVISIONAL ? judgeOption(st.v, m.opts) : null);
+      if (!chosen) { results.push({ ...st, ok: false, label: m.label, why: '选项里没有该值，也没有可靠的近似项（不猜，留待最终确认）', opts: m.opts.map(x => x.label).slice(0, 30) }); continue; }
+      if (!o) provisional = { original: String(st.v), chosen: chosen.label, score: chosen.score };
       // ⚠️ 2026-09-24 虎牙实测：select 真实点选后 store 存的是**标签原文**；`_set_(option.value)`（如 性别→0）会
       // 「假成功」——display-value 为空、还残留「这是必填项」→ 表单级报错。所以 label 优先，value 只作回退。
-      optCandidates = [String(o.label)];
-      if (o.value !== undefined && String(o.value) !== String(o.label)) optCandidates.push(o.value);
-      payload = optCandidates[0]; note = '选项→label 优先';
+      optCandidates = [String(chosen.label)];
+      if (chosen.value !== undefined && String(chosen.value) !== String(chosen.label)) optCandidates.push(chosen.value);
+      payload = optCandidates[0];
+      note = o ? '选项→label 优先' : `选项→暂选「${chosen.label}」（相似度 ${chosen.score.toFixed(2)}）`;
     } else {
       payload = st.v; note = '文本直写';
     }
@@ -288,11 +321,15 @@ return (async () => {
       deferred.push(...steps.slice(stepIndex + 1));
       break;
     }
-    results.push({ blockId: st.blockId, fid: st.fid, occ: st.occ || 0, label: m.label, type: m.type, v: st.v, ok, note, after, domVal: domVal.slice(0, 40) });
+    results.push({ blockId: st.blockId, fid: st.fid, occ: m.occ || 0, label: m.label, type: m.type, v: st.v, ok, note, after, domVal: domVal.slice(0, 40),
+                   ...(provisional ? { review: true, provisional } : {}) });
+    if (provisional) needsReview.push({ blockId: st.blockId, fid: st.fid, occ: m.occ || 0, label: m.label, type: m.type,
+      original: provisional.original, value: String(payload), status: ok ? 'filled' : 'failed',
+      reviewReason: `页面无精确选项，按唯一近似项（相似度 ${provisional.score.toFixed(2)}）暂选` });
   }
   return {
     mode: 'fill', url: location.href, wrote: results.filter(r => r.ok).length,
-    bad: results.filter(r => !r.ok).length, results, deferred, budgetExceeded,
+    bad: results.filter(r => !r.ok).length, results, deferred, budgetExceeded, needsReview,
     elapsedMs: Date.now() - startedAt,
     // 20 行大表上 requiredErrors() 会对每个字段块读 innerText（同步 layout），一趟要几百秒
     // → CONFIG.skipRequiredErrors 时跳过，改由末尾单独一次廉价扫描（[class*=Input-message]）

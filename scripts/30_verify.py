@@ -13,7 +13,7 @@
   B 与画像一致性（能映射到 canonical 的字段）
   C 完整性（必填是否都有值 / 报错提示 / 文件附件）
   D 选项闸门（下拉/单选的值是否真的在页面选项里；不在就报警 —— 不猜）
-  E 未映射项（→ 必须去问用户，不许猜）
+  E 未映射项（→ 填完后集中确认，不编造）
   报告按「区块 section / 重复块 block」分组，多段经历一眼可见
 退出码: 0 = 无硬冲突；1 = 存在不一致
 """
@@ -164,7 +164,7 @@ def main():
         print(f"  （跳过：{'没给 --scan' if not scan else '扫描结果里没有选项信息'}；"
               f"自定义下拉请先跑 20_fill.js 的 OPTS.probeOptions=true）")
 
-    print("\nE. 未映射字段（必须问用户，不许猜）")
+    print("\nE. 未映射字段（列入填后集中确认，不编造）")
     for f in fields:
         if key_of(f) is None and str(f.get("value") or "") == "":
             tag = "必填" if f.get("required") else "选填"

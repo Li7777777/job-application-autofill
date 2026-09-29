@@ -1,7 +1,7 @@
 {
   "host": "app.example.com",
   "url": "https://app.example.com/campus/00000#/job/0000-apply",
-  "at": "2026-09-14T01:38:54",
+  "at": "2026-09-29T20:24:54",
   "platform": {
     "framework": "mokahr",
     "score": {
@@ -28,8 +28,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "job.intended_city",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f2": {
@@ -42,8 +46,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "job.referral_code",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f3": {
@@ -56,8 +64,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "file",
       "source": "file-field",
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f4": {
@@ -70,8 +82,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.name",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f5": {
@@ -84,8 +100,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.phone",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": true
     },
     "f6": {
@@ -98,8 +118,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.phone",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f7": {
@@ -112,8 +136,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.email",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f8": {
@@ -126,8 +154,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.gender",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f9": {
@@ -140,8 +172,12 @@
       "framework": "mokahr",
       "granularity": "day",
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "personal.birth_date",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f12": {
@@ -154,8 +190,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "personal.highest_degree",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f13": {
@@ -168,8 +208,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "personal.location",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f14": {
@@ -182,8 +226,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": "job.source_channel",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f15": {
@@ -196,8 +244,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f16": {
@@ -210,8 +262,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f17": {
@@ -224,8 +280,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f18": {
@@ -238,8 +298,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f19": {
@@ -252,8 +316,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f20": {
@@ -266,8 +334,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": true,
+      "requiredConfidence": "medium",
       "canonical": null,
       "source": null,
+      "confidence": null,
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f23": {
@@ -280,8 +352,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.start#0",
       "source": null,
+      "confidence": "medium",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f25": {
@@ -294,8 +370,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.school#0",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f26": {
@@ -308,8 +388,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.major#0",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f27": {
@@ -322,8 +406,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.degree#0",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f28": {
@@ -336,8 +424,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.school#1",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f29": {
@@ -350,8 +442,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.major#1",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f30": {
@@ -364,8 +460,12 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.degree#1",
       "source": null,
+      "confidence": "high",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     },
     "f31": {
@@ -378,22 +478,29 @@
       "framework": "mokahr",
       "granularity": null,
       "required": false,
+      "requiredConfidence": "low",
       "canonical": "education.start#1",
       "source": null,
+      "confidence": "medium",
+      "review": false,
+      "reviewReasons": [],
       "dropped": false
     }
   },
   "records": {
     "education": 2
   },
-  "todo": [
+  "review": [
     {
       "uid": "f1",
       "label": "意向工作城市",
       "type": "missing-required",
       "section": "申请信息",
       "block": -1,
-      "question": "必填字段「意向工作城市」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「意向工作城市」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f2",
@@ -401,14 +508,19 @@
       "type": "missing-required",
       "section": "申请信息",
       "block": -1,
-      "question": "必填字段「推荐码」（text）画像/记忆里没有值，请提供答案"
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「推荐码」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f3",
       "label": "上传简历",
       "type": "file",
       "section": "申请信息",
-      "question": "「上传简历」是文件上传字段，需要附件路径（用 upload 工具挂）"
+      "question": "「上传简历」是文件上传字段，需要附件路径（用 upload 工具挂）",
+      "status": "unfilled",
+      "blocking": false
     },
     {
       "uid": "f4",
@@ -416,7 +528,10 @@
       "type": "missing-required",
       "section": "个人信息",
       "block": -1,
-      "question": "必填字段「姓名」（text）画像/记忆里没有值，请提供答案"
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「姓名」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f6",
@@ -424,7 +539,10 @@
       "type": "missing-required",
       "section": "个人信息",
       "block": -1,
-      "question": "必填字段「手机号码」（text）画像/记忆里没有值，请提供答案"
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「手机号码」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f7",
@@ -432,7 +550,10 @@
       "type": "missing-required",
       "section": "个人信息",
       "block": -1,
-      "question": "必填字段「邮箱」（text）画像/记忆里没有值，请提供答案"
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「邮箱」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f8",
@@ -440,7 +561,10 @@
       "type": "missing-required",
       "section": "个人信息",
       "block": -1,
-      "question": "必填字段「性别」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「性别」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f9",
@@ -448,7 +572,10 @@
       "type": "missing-required",
       "section": "个人信息",
       "block": -1,
-      "question": "必填字段「出生日期 (年龄)」（date-picker）画像/记忆里没有值，请提供答案"
+      "kind": "date-picker",
+      "status": "unfilled",
+      "question": "必填字段「出生日期 (年龄)」（date-picker）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f14",
@@ -456,7 +583,10 @@
       "type": "missing-required",
       "section": "申请信息",
       "block": -1,
-      "question": "必填字段「招聘信息获取渠道」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「招聘信息获取渠道」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f15",
@@ -464,7 +594,10 @@
       "type": "missing-required",
       "section": "申请信息",
       "block": -1,
-      "question": "必填字段「您使用微博的频率」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「您使用微博的频率」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f16",
@@ -472,7 +605,10 @@
       "type": "missing-required",
       "section": "附加信息",
       "block": -1,
-      "question": "必填字段「是否获得国家级及以上专利？」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级及以上专利？」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f17",
@@ -480,7 +616,10 @@
       "type": "missing-required",
       "section": "附加信息",
       "block": -1,
-      "question": "必填字段「是否在国际级或国家重点期刊发表论文」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否在国际级或国家重点期刊发表论文」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f18",
@@ -488,7 +627,10 @@
       "type": "missing-required",
       "section": "附加信息",
       "block": -1,
-      "question": "必填字段「作为主创人员，是否有过商业化成功的产品或研发经验」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「作为主创人员，是否有过商业化成功的产品或研发经验」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f19",
@@ -496,7 +638,10 @@
       "type": "missing-required",
       "section": "附加信息",
       "block": -1,
-      "question": "必填字段「是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     },
     {
       "uid": "f20",
@@ -504,7 +649,177 @@
       "type": "missing-required",
       "section": "附加信息",
       "block": -1,
-      "question": "必填字段「是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有值，请提供答案"
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    }
+  ],
+  "review_count": 15,
+  "strict": false,
+  "todo": [
+    {
+      "uid": "f1",
+      "label": "意向工作城市",
+      "type": "missing-required",
+      "section": "申请信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「意向工作城市」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f2",
+      "label": "推荐码",
+      "type": "missing-required",
+      "section": "申请信息",
+      "block": -1,
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「推荐码」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f3",
+      "label": "上传简历",
+      "type": "file",
+      "section": "申请信息",
+      "question": "「上传简历」是文件上传字段，需要附件路径（用 upload 工具挂）",
+      "status": "unfilled",
+      "blocking": false
+    },
+    {
+      "uid": "f4",
+      "label": "姓名",
+      "type": "missing-required",
+      "section": "个人信息",
+      "block": -1,
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「姓名」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f6",
+      "label": "手机号码",
+      "type": "missing-required",
+      "section": "个人信息",
+      "block": -1,
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「手机号码」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f7",
+      "label": "邮箱",
+      "type": "missing-required",
+      "section": "个人信息",
+      "block": -1,
+      "kind": "text",
+      "status": "unfilled",
+      "question": "必填字段「邮箱」（text）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f8",
+      "label": "性别",
+      "type": "missing-required",
+      "section": "个人信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「性别」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f9",
+      "label": "出生日期 (年龄)",
+      "type": "missing-required",
+      "section": "个人信息",
+      "block": -1,
+      "kind": "date-picker",
+      "status": "unfilled",
+      "question": "必填字段「出生日期 (年龄)」（date-picker）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f14",
+      "label": "招聘信息获取渠道",
+      "type": "missing-required",
+      "section": "申请信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「招聘信息获取渠道」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f15",
+      "label": "您使用微博的频率",
+      "type": "missing-required",
+      "section": "申请信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「您使用微博的频率」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f16",
+      "label": "是否获得国家级及以上专利？",
+      "type": "missing-required",
+      "section": "附加信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级及以上专利？」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f17",
+      "label": "是否在国际级或国家重点期刊发表论文",
+      "type": "missing-required",
+      "section": "附加信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否在国际级或国家重点期刊发表论文」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f18",
+      "label": "作为主创人员，是否有过商业化成功的产品或研发经验",
+      "type": "missing-required",
+      "section": "附加信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「作为主创人员，是否有过商业化成功的产品或研发经验」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f19",
+      "label": "是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）",
+      "type": "missing-required",
+      "section": "附加信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级或世界级比赛三等奖及以上（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
+    },
+    {
+      "uid": "f20",
+      "label": "是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）",
+      "type": "missing-required",
+      "section": "附加信息",
+      "block": -1,
+      "kind": "custom-select",
+      "status": "unfilled",
+      "question": "必填字段「是否获得国家级比赛优秀名次或知名企业级比赛前三名（比赛性质与应聘岗位高度相关）」（custom-select）画像/记忆里没有可用值；为避免编造个人事实，当前留空，请在填充完成后补充或确认保持空白",
+      "blocking": false
     }
   ],
   "todo_count": 15,

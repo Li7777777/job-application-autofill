@@ -185,8 +185,10 @@ def is_subsequence(short, long):
 
 
 def rank_options(want, options, limit=5):
-    """返回按分数降序的 [{text, score, why}]。**仅用于建议**：
-    score >= AUTO_OPTION_THRESHOLD 才可直接落到 mapping，其余一律进 todo 让用户确认。"""
+    """返回按分数降序的 [{text, score, why}]。
+    score >= AUTO_OPTION_THRESHOLD 直接落到 mapping；未达阈值的候选由调用方决定：
+    40_build_mapping.py 在 review-first 下可暂选「唯一且 >= REVIEW_OPTION_THRESHOLD」的项并标记最终复核，
+    并列 / 过弱则留空进复核清单；20_fill.js 页面层永远只点 exact / normalized-equal。"""
     ranked = []
     for o in options or []:
         sc, why = score_option(want, o)
@@ -368,7 +370,7 @@ def date_variants(v):
 
 
 def satisfies_granularity(value, granularity):
-    """画像值能否满足页面要求的粒度？（页面要 day、值只有 month → False，必须问用户）"""
+    """画像值能否满足页面要求的粒度？（页面要 day、值只有 month → False：不编造，留空并列入填后集中确认）"""
     need = GRAN_RANK.get(granularity or "", 0)
     if need == 0:
         return True

@@ -44,8 +44,8 @@
    |---|---|---|
    | 原文完全相等 | 1.00 `exact` | ✅ 点 |
    | 去空格/标点/全角、转小写后相等 | 0.98 `normalized-equal` | ✅ 点（`allowNormalizedMatch`） |
-   | 一方包含另一方 | 0.5–0.8 `contains` | ❌ 只进 `suggestions` |
-   | 中文缩写（北大→北京大学）按序包含 | 0.45 `subsequence` | ❌ 只进 `suggestions` |
+   | 一方包含另一方 | 0.5–0.8 `contains` | ❌ 填充器不点；编译层可暂选**唯一且得分 ≥0.60** 的候选，标记填后复核 |
+   | 中文缩写（北大→北京大学）按序包含 | 0.45 `subsequence` | ❌ 低于暂选阈值，只进 `suggestions` |
    | 其它 | 0 | ❌ |
 6. **点击**：`scrollIntoView` → `clickReal` → `settleMs`。
 7. **回读**：`readDisplay`（优先框架的 `display_value_selector`，其次 `[class*=display-value]`…
@@ -69,15 +69,15 @@ python scripts/90_memory.py record-probe --host <host> --scan data/runs/<host>-s
     --probe data/runs/<host>-probe.json
 python scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --probe data/runs/<host>-probe.json
 ```
-好处：**自定义下拉的选项也能在编译阶段做闸门**，值对不上就进 `*-todo.md` 的 `option-choice`，
-一次问完，而不是填到一半才发现「弹层里没有这个选项」。
+好处：**自定义下拉的选项也能在编译阶段做闸门**，精确项直接写入；唯一且得分 ≥0.60 的近似项
+先暂选并标记填后复核；并列、过弱或无候选则进 `*-todo.md` 的 `option-choice`（留空）。
 
 ## 3. 日期控件（时间粒度自适应）
 
 **核心原则：画像只存最细的一份，页面要多粗就用多粗。**
 `personal.birth_date` 填 `1999-09-15`，遇到「出生年月」控件自动填 `1999-09`，遇到「出生年份」自动填 `1999`，
 并把「丢了哪一级精度」写进回报。反过来——页面要年月日、画像只有年月——**绝不拿 `01` 去凑日号**，
-而是进 `*-todo.md` 让用户补（`date-granularity`）。
+而是留空并列入 `*-todo.md` 的 `date-granularity` 填后复核项（由用户集中补日期，中途不阻塞其它字段）。
 
 ### 3.1 粒度从哪来、谁说了算
 
@@ -306,7 +306,7 @@ ant-picker ant-calendar ud-picker ux-calendar rc-picker
    字段标签（把「性别」当值上报）→ 回读优先用 `fiber.memoizedProps.value` 或 trigger 自身的 `textContent`。
 
 另外这类站点的**必填星号在 label 内的独立 `<span>*</span>`**，`norm_label` 会把它清掉 →
-`required` 判定不可信，必须人工按「label 文本是否带 `*`」复核一遍再决定哪些是阻塞项。
+`required` 判定不可信，必须人工按「label 文本是否带 `*`」复核一遍再决定哪些是必须补齐的缺口。
 
 ## 12. 日期输入顺序：有日期控件就先用组件（2026-09-25 落地）
 

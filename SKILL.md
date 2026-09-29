@@ -1,7 +1,7 @@
 ---
 name: job-application-autofill
-description: 面向简历投递 / 校招网申的自动填表 skill（站点无关）。给定用户提供的招聘网站或申请页链接：扫描表单与必填项（含区块/多段经历/组件框架识别）→ 上传简历触发解析预填 → 用画像与记忆编译字段映射（选项对不上一律只出建议）→ 用站点内置组件（自定义下拉、级联、日期日历、文件上传）自动填入 → 程序化校验后交用户审核；并把「字段名→取值」持续沉淀成可复用的问答记忆、选项对照与站点记忆，下次投递越用越快。内置 antd/ElementUI/ATSX/Moka/北森/Hotjob/飞书 七大 ATS 框架的控件与日历配方。遇到不确定一律问用户、绝不猜测，且**绝不代替用户提交**。当用户要投简历、填网申/校招申请表/报名/登记表/求职申请，或给出 URL 说「帮我填一下」「帮我投」时使用。
-version: 1.4.0
+description: 面向简历投递 / 校招网申的自动填表 skill（站点无关）。给定用户提供的招聘网站或申请页链接：扫描表单与必填项（含区块/多段经历/组件框架识别）→ 上传简历触发解析预填 → 用画像与记忆编译字段映射（选项对不上时按经验暂选唯一足够相近的页面选项并标记填后复核；并列/过弱候选仍留空，不代猜个人事实。）→ 用站点内置组件（自定义下拉、级联、日期日历、文件上传）自动填入 → 程序化校验后交用户审核；并把「字段名→取值」持续沉淀成可复用的问答记忆、选项对照与站点记忆，下次投递越用越快。内置 antd/ElementUI/ATSX/Moka/北森/Hotjob/飞书 七大 ATS 框架的控件与日历配方。有来源的不确定值先标记暂填并在填后集中审核，无事实依据的字段留空，不在填充前反复打断用户；绝不代替用户提交。当用户要投简历、填网申/校招申请表/报名/登记表/求职申请，或给出 URL 说「帮我填一下」「帮我投」时使用。
+version: 1.5.0
 metadata:
   verified_sites: "app.mokahr.com（自定义组件重型表单，React16 fiber 直写；含景嘉微/虎牙实现）、recruit.pg.com.cn（Moka 自建域名，sd-* 组件 + 双语按钮）、recruit.sinovatio.com（Vue2+Vuetify2，组件 formData 直读）、recruit.inovance.com（react-aria）、wecruit.hotjob.cn（Hotjob）、sokon.zhiye.com / cxmt.zhiye.com / coamc.zhiye.com / zhaopin.chnenergy.com.cn（北森 zhiye 系）、i.zhaopin.com（Vue2+iView 在线简历）、www.zhipin.com（自研 Vue2 组件库）、zhaopin.yaoji.cn（aPaaS + shadcn/ui Radix，fiber 组件 API）、job.chinatelecom.com.cn（大易 WinTalent）、career.honor.com、selenium web-form（原生控件全类型）"
   data_dir: "<运行环境>/data（skill 安装目录下，已 gitignore）；可用 $JAA_DATA_DIR 覆盖"
@@ -24,12 +24,10 @@ metadata:
 
 1. **绝不代替用户提交**。不点「提交 / 投递 / 立即申请 / 确认 / 下一步 / 发送 / 支付 / 删除」类按钮；
    脚本内有 `SUBMIT_RE` 拦截，扫描/填充只写字段。是否提交、何时提交，永远由用户决定。
-2. **不确定就问，不许猜**。字段名认不出、选项对不上、必填判定存疑、日期控件写不进去 → 一律进
-   `*-todo.md` 让用户回答；**禁止**凭常识填一个「大概是这个」的值，也禁止静默失败。
-   选项匹配的安全线（三方一致：`20_fill.js`、`jaa_lib.py`、`40_build_mapping.py`）：
-   **只有「原文相等」与「去空格/标点/全角、转小写后相等」才自动选**；
-   包含匹配（北京→北京市）与中文缩写（北大→北京大学）**只进 suggestions 让用户选**。
-   日历同理：找不到目标日**不**退化成「当天≤15 取第一个可用日」。
+2. **尽量不在填充前打断用户；不确定项先做有依据的暂定判断**。若字段含义有中置信度匹配、或画像值与页面选项只有一个足够相近的候选（相似度 ≥0.60），先暂填并标记来源、置信度和依据，统一放进填后复核清单；不得把暂定值伪装成已确认。
+   没有画像/记忆/页面结构等事实依据、候选并列或过弱（<0.60）、日期精度不足、用户同意/资格/经历等事实题无证据时，当前留空并继续其它字段，填完后集中询问。不得为了填满而编造个人事实。
+   选项匹配的安全线：填充器最终只点页面中**原文或归一化相等**的选项；编译器若把唯一近似项暂选，会先将 mapping 值替换为该页面实际选项文本并标记 `review`，因此填充时仍是精确点选。并列候选只列建议，不自动决定。
+   日历找不到目标日不挑「最近可用日」；缺少日期精度时留空，不拿 `01` 凑日号。
 3. **值要能解释来源**。每个字段都记录 `canonical / source ∈ {profile, site-memory, qa, user-answer, manual}`；
    校验报告里要能说清「这个值是哪来的」。
 4. **个人数据只许进 `data/`（已 gitignore），仓库里只写占位符**。
@@ -107,12 +105,10 @@ metadata:
 > 页面长、sticky 底栏会盖住内容 → 交互前先用 `act scroll` 让目标居中；否则 MCP act 可能报告
 > `covered by header.fixed/div.absolute`。这是保护，不是故障。
 
-### ① 拿到网站并确认范围
-用户给 URL。若用户没给，就问：
-- 要填哪个页面（URL）？
-- 用的哪份简历/画像？
-- 有没有**这次特有的问题**（是否题、意向、渠道等）？
-> 别自己假设「大概是求职网申」。
+### ① 拿到网站并复用已有资料
+用户给 URL；若没有 URL，只问页面地址（这是启动流程所需的最小信息）。
+优先读取已有 profile、问答记忆、站点记忆与可用简历路径；不要在扫描前逐项询问这次职位字段、意向或问答。
+没有可用简历时仍继续扫描/预填非文件字段，把缺失附件列入最终确认清单；仅当缺少的决定会导致不可逆动作或用户要求严格模式时，才提前暂停询问。
 
 ### ② 打开并扫描
 ```text
@@ -150,15 +146,14 @@ browseros-neo_evaluate(page=<id>, <scripts/10_scan_form.js>, timeout=25000)
 > 组件框架认错/没认出时，用脚本顶部的 `OVERRIDE = { framework, layout, extraControlSelector }` 覆盖，
 > 并在 `references/adapters/<host>.md` 里记下来。
 
-### ③ 编译映射 + 生成「必须问用户」清单
+### ③ 编译映射 + 生成「填充后集中确认」清单
 ```bash
 python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json
 ```
-产出 `data/runs/<host>-mapping.json`（uid→值）与 `data/runs/<host>-todo.md`。
-退出码 **2 = 有阻塞项**（必填缺值 / 未映射 / 需要附件 / **选项对不上** / **页面要的日期粒度比画像更细**），
-此时**不要继续填**。
-> 日期字段在 mapping 里会写成 `{ "v": "1999-09-15", "granularity": "month" }`：值保留画像的完整精度，
-> `granularity` 是「这个字段在页面上要哪一级」，填充器据此截断（见 ⑥）。
+产出 `data/runs/<host>-mapping.json`（uid→值）与 `data/runs/<host>-todo.md`（暂定值/未解决项的最终复核清单）。
+默认 **review-first**：唯一、足够相近的页面选项先暂填；字段中置信度映射也先填；无证据或候选并列时留空，但**不阻塞其余字段**。mapping/meta 会记录 `review`、来源、置信度与依据；默认退出码 0 表示可以继续填，不表示所有字段已确认。
+要强制恢复旧的「填前逐项确认」模式，显式加 `--strict`（有复核项返回 2）。
+> 日期字段仍写成 `{ "v": "1999-09-15", "granularity": "month" }`：填充器按页面粒度截断；画像精度不足仍留空并放进最终清单。
 
 ### ③′ （可选，强烈建议）先探测自定义下拉的真实选项
 表单里若有 `kind = custom-select / cascader / tree-select`，先跑一次**只读探测**，
@@ -180,32 +175,20 @@ python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json \
 ```
 > probe 只 `click` 触发元素并在读完后按 Esc 关弹层，**不会选中任何项**，也不会碰提交类按钮。
 
-### ④ 问用户（用 ask_user_question，别自己猜）
-把 todo 里阻塞项**一次性**问完（每题 2–4 个选项，自由文本让用户直接打字）。
-`todo` 里每项带 `type`：
+### ④ 填充前不追问：按证据暂填，无法判断的留空
+默认不把 `todo.md` 当作填充前的问卷。系统按以下顺序尽量完成页面：
+- 画像/已确认问答/站点记忆的明确值 → 先填；字段名只有中置信度匹配 → 暂填并在清单注明依据。
+- 简历值不在页面选项中，但只有一个相似度 ≥0.60 的最高候选 → 暂选该**页面原文**并标注 `option-judged`；并列、弱候选或无选项样本 → 留空，不乱点。
+- 没有来源的个人事实（例如是否有专利/奖项、婚育/政治面貌、同意条款）、缺少的日期精度、无简历/上传路径 → 不编造、不擅自勾选，先留空，继续填其它字段。
 
-| type | 含义 | 怎么问 |
-|---|---|---|
-| `unmapped-required` | 必填但字典/记忆都不认识这个字段名 | 直接问值；拿到后 `add-alias`+`add-qa` |
-| `missing-required` | 认识字段但画像里没值 | 问值；必要时补进 `profile.json` |
-| `file` | 需要附件路径 | 问文件路径，走 ⑤ |
-| `option-choice` | **值不在页面选项里**（自定义下拉尤其常见） | 列出「建议值（含匹配依据）+ 页面全部选项」，让用户选一个 |
-| `date-granularity` | **页面要的时间粒度比画像更细**（要年月日、画像只有年月） | 让用户补到更细的日期；**不要**拿 `01` 去凑日号 |
-
-拿到答案后：
+只有用户明确要求严格模式时才在填充前问：
 ```bash
-# 站点特有的问答，记进「问答记忆」，下次自动命中
-python $SKILL/scripts/90_memory.py add-qa --question "您使用微博的频率" --answer "高频：…≥20天"
-# 字段名是新的叫法，补进字典别名
-python $SKILL/scripts/90_memory.py add-alias --canonical personal.phone --alias "考生手机号"
-# 用户选定了某个选项 → 记下「简历值 → 页面选项」的对照，下次同站直接命中，不再问
-python $SKILL/scripts/90_memory.py add-option --host <host> \
-    --label "意向工作城市" --value "北京" --option "北京市"
-# 然后用用户答案重建映射
-python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --answers '{"f15":"高频：…"}'
+python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --strict
 ```
+默认流程会在页面填充与校验后统一展示暂定值、依据、未解决缺口与实际页面值，让用户一次选择「接受全部暂填 / 指定字段修改 / 保持留空项」。用户的修改可用 `--answers` 重编 mapping，并按幂等方式重跑。
 
 ### ⑤ 上传附件（优先 browseros-neo_upload）
+有现成简历路径就直接上传；缺路径时不在填前打断用户，先继续其它字段并把附件留作最终缺口。
 React 受控的 `input[type=file]` 默认先用 MCP 上传：先通过 `evaluate` 给真实 file input 加可读的
 `aria-label` 并滚动到视口，再 `snapshot(mode="interactive")` 找到 file input ref，调用
 `browseros-neo_upload`。如果 MCP 明确报 `Node is not a file input element`、change 没有进入页面状态，
@@ -231,39 +214,60 @@ node $SKILL/scripts/cdp.mjs uploadc <targetId> <触发元素.js> "<本机简历�
 #   cdp.mjs eval/click/revalclick/focus/uploadc <targetId> ...
 ```
 
-MCP 填充脚本按字段逐个回读，返回 `{failed, suggestions, deferred}` 必须逐条解释；
-`deferred` 表示时间预算到达，不表示失败。重复执行相同 mapping 是安全的：`skipped` 表示已经是目标值。
+MCP 填充脚本按字段逐个回读，返回 `{failed, suggestions, deferred, needsReview}` 必须逐条解释；
+`deferred` 表示时间预算到达，不表示失败；`needsReview` 汇总实际落入、已存在或失败的暂定字段及理由。重复执行相同 mapping 是安全的：`skipped` 表示已经是目标值。
 
 MAPPING 的值可以是字符串，也可以是带指令的对象：
 ```js
 { "f3": "张三",
-  "f7": { v: "北京市", block: 0 },                     // 指定重复块
-  "f9": { v: "2027-06", granularity: 'month' },        // 日期：页面要年月（编译期自动带上）
-  "f11": { v: "2027-06", mode: 'period' } }            // 「年+月」分片控件
+  "f7": { v: "北京市", block: 0 },                                // 指定重复块
+  "f8": { v: "北京大学", review: true, source: "profile+option-judged",
+          confidence: "high", reviewReason: "页面无精确项，按唯一近似项暂选" }, // 填后集中确认
+  "f9": { v: "2027-06", granularity: 'month' },                    // 日期：页面要年月
+  "f11": { v: "2027-06", mode: 'period' } }                        // 「年+月」分片控件
 ```
 常用开关（`20_fill.js` 顶部 `OPTS`）：`dryRun`（只报计划）、`simulateTyping`（逐字符模拟输入，对付只认 keydown 的联想框）、
 `suggestContainsMatch`（包含/缩写匹配只进建议）、`scrollIntoView`、`panelTimeoutMs`。
-> 选项匹配的安全线：**只有「原文相等」或「去空格/标点/全角后相等」才会点击**；
-> 包含匹配（0.5–0.8）与中文缩写（0.45，如 北大→北京大学）**只产出 suggestions**。
+**选项匹配原则**：填充器最终只按页面真实选项的原文/归一化文本点击；编译器可将唯一且相似度 ≥0.60 的候选暂选为页面原文，并在最终清单标记，低于阈值或并列则留空。
 
 > **时间粒度**：画像只存最细的（`birth_date: 1999-09-15`），年月/年份粒度的组件自动截断，
 > 并在 `detail` 里注明丢了哪一级；反过来要求更细时进 todo（`date-granularity`）而不是编造。
 > **填入顺序**：识别到日期组件（或只读日期框）就先走组件面板（年→月→日）再回读，只有组件不可用/面板打不开才回退文本直写；
 > 详见 `references/component-recipes.md §3、§12`。
 
-### ⑦ 程序校验 + 交给用户审核
+### ⑦ 程序校验 + 最终集中确认
 ```text
 browseros-neo_evaluate(page=<id>, <scripts/15_dump_state.js>, timeout=25000)
 # 把返回 JSON 保存到 data/runs/<host>-state.json，再在本地运行：
 python $SKILL/scripts/30_verify.py --state data/runs/<host>-state.json \
     --mapping data/runs/<host>-mapping.json --scan data/runs/<host>-scan.json
 ```
-报告 A 格式 / B 与画像一致性 / C 完整性（必填+报错+附件）/ **D 选项闸门（下拉的值真的在页面选项里吗）** /
-E 未映射项 / F 结论，并按「区块 + 第几段」分组，多段经历一眼可见。
-给了 `--scan` 才会做 D；自定义下拉的选项记得先用 ③′ 的 `--probe` 并进扫描结果。
-> verify 报告若出现大量「时间不一致」，先看是不是把项目/教育起止日期误匹配到了 `personal.birth_date`
-> （无归一化标签的分片控件常见误报）——用 CDP 按结构化审计（label→控件）复核后再下结论。
-**把报告摘要 + 每个字段的值和来源，连同「我未提交」一起交给用户**，让用户自己在浏览器里核对。
+程序仍然检查 A 格式 / B 与画像一致性 / C 完整性（必填+报错+附件）/ D 选项闸门 / E 未映射，并按区块+重复块分组。
+填充返回的 `needsReview`（含组件 API 快路径的同名字段）汇总了暂定值实际落入/已存在/失败的状态，一并列入确认。
+
+复核清单里每项的 `type`（来自 `*-mapping.json` 的 `review`/`todo`）：
+
+| type | status | 怎么向用户呈现 |
+|---|---|---|
+| `prefill-review` | prefilled | 展示暂填值 + 来源 + 置信度 + 依据（中置信度映射 / 唯一近似选项暂选 / 必填判定存疑），可接受或逐项改 |
+| `option-choice` | unfilled | 选项并列、过弱或无候选；列页面全部选项让用户选 |
+| `date-granularity` | unfilled | 页面要的精度高于画像；请用户补日期，**绝不拿 `01` 凑日号** |
+| `missing-required` / `unmapped-required` | unfilled | 无可用事实或字段不认识；问值或确认保持空白 |
+| `file` | unfilled | 缺附件路径；让用户给路径或确认自己上传 |
+
+用户确认前不提交；用户要修改时，将其答案并入 `--answers` 后重编映射、在同一页幂等重填并重新校验。
+确认后的固定口径要记下来，下次同站不再重复打扰：
+```bash
+# 站点特有问句 → 答案
+python $SKILL/scripts/90_memory.py add-qa --question "您使用微博的频率" --answer "高频：…≥20天"
+# 新的字段叫法 → 补进字典别名
+python $SKILL/scripts/90_memory.py add-alias --canonical personal.phone --alias "考生手机号"
+# 用户选定的选项 →「简历值 → 页面选项」对照（下次精确命中，不再暂选）
+python $SKILL/scripts/90_memory.py add-option --host <host> \
+    --label "意向工作城市" --value "北京" --option "北京市"
+python $SKILL/scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --answers '{"f15":"高频：…"}'
+```
+报告摘要必须说明「我未提交」。
 
 ### ⑧ 沉淀经验（这是本 skill 的价值所在）
 ```bash
@@ -295,16 +299,16 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 |------|--------|------|
 | `scripts/10_scan_form.js` | 页面 (evaluate) | 通用扫描：控件/字段名候选/**归一化字段名**/必填判定/选项 + **区块 section**、**重复块 block**、**组件框架 framework**；打 `data-jaa-*` 标记 |
 | `scripts/15_dump_state.js` | 页面 (evaluate) | 导出当前已填状态（值/必填/报错/附件/区块/块/框架） |
-| `scripts/20_fill.js` | 页面 (MCP evaluate) | 通用填充：React/Vue 原生 setter + 模拟输入 + contenteditable + 七大框架下拉/级联 + 日期日历引擎 + 年月分片 + **选项只读探测**；默认 18s 业务预算，返回 `deferred` 后同页重跑；**带提交按钮拦截** |
-| `scripts/25_mokahr_fiber.js` | 页面 (MCP evaluate) | **组件 API 快路径（默认首选，任何站先试）**：`dump/fill/store` 三模式；默认 18s 预算，返回 `deferred` 后只把该数组作为下一次 `CONFIG.steps`（避免重放 add/delLast）；不可达时回退通用方案；含提交拦截与选项闸门 |
+| `scripts/20_fill.js` | 页面 (MCP evaluate) | 通用填充：React/Vue 原生 setter + 模拟输入 + contenteditable + 七大框架下拉/级联 + 日期日历引擎 + 年月分片 + **选项只读探测**；默认 18s 业务预算，返回 `deferred` 后同页重跑；暂定 mapping 元数据随结果进入 `needsReview`；**带提交按钮拦截** |
+| `scripts/25_mokahr_fiber.js` | 页面 (MCP evaluate) | **组件 API 快路径（默认首选，任何站先试）**：`dump/fill/store` 三模式；默认 18s 预算，返回 `deferred` 后只把该数组作为下一次 `CONFIG.steps`（避免重放 add/delLast）；不可达时回退通用方案；含提交拦截、选项闸门与唯一近似项暂选（`needsReview`） |
 | `scripts/30_verify.py` | 本地 | 状态 vs 画像/字典 校验（格式/一致性/完整性/**选项闸门**/未映射，按区块分段） |
-| `scripts/40_build_mapping.py` | 本地 | 编译 uid→值 的映射 + 待问用户清单；**多段经历按 (区块,块) 定记录序号**；**选项对不上就阻塞不猜** |
+| `scripts/40_build_mapping.py` | 本地 | 默认 review-first 编译预填 mapping + 填后复核清单（暂定值含来源/置信度/理由）；`--strict` 可选填前阻塞；**多段经历按 (区块,块) 定记录序号** |
 | `scripts/90_memory.py` | 本地 | 站点记忆 / 问答记忆 / 别名 / **选项对照 `add-option`** / **选项目录 `record-probe`** / 运行日志 |
 | `scripts/cdp.mjs` | 本地（Node 18+） | **CDP 备用接管通道（默认 127.0.0.1:9110）**：MCP ownership 丢失、真实交互连续失败或受控上传失败时，通过 `list` 找同一 targetId，再用 `eval/click/type/focus/uploadc` 恢复；正常流程禁止用 `open` 另起页面。 |
 | `scripts/jaa_lib.py` | 本地 | 共用：字典匹配、**标签归一化 `norm_label`**、画像取值、**选项打分 `score_option/rank_options/best_option`**、**占位符过滤 `is_placeholder`**、格式校验、**泄漏守卫 `sensitive_tokens/leak_scan/redact_text`**（拿画像取值当黑名单扫可发布文件） |
 | `scripts/95_lint_notes.py` | 本地 | **沉淀守卫**：可发布文件（排除 gitignore 的 `data/`）里的个人数据检查 / `--fix` 一键脱敏 / `--list-tokens` 看黑名单 / `--paths` 只查指定文件；`jaa-leak-allow` 标记可豁免「站点公开选项表」这类行 |
 | `dev/check_js.js` | 本地（Node） | 开发自检：把三个页面脚本按 evaluate 的「函数体」形状解析一遍 |
-| `tests/browser_e2e.py` | 本地（Node+browser） | **真机端到端**：拿 `tests/fixtures/form-lab.html`（合成表单）跑完整链路，验证下拉/日历/多段经历/提交拦截/选项闸门/幂等；无浏览器时自动 SKIP |
+| `tests/browser_e2e.py` | 本地（Node+browser） | **真机端到端**：拿 `tests/fixtures/form-lab.html`（合成表单）跑完整链路，验证下拉/日历/多段经历/提交拦截/选项闸门/暂选透传/幂等；无浏览器时自动 SKIP |
 
 | 资产 / 文档 | 作用 |
 |---|---|
@@ -322,9 +326,10 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 只读/可写日期组件弹出的日历面板（8 套内置预设；**有组件先走组件面板**，面板不通才回退文本直写）、级联/树形下拉（按 `/` 拆级逐级精确命中）、
 `contenteditable` 富文本、文件上传（配合 upload 工具）。
 
-**新增可用（1.1.0）**：
+**能力增强**：：
 - **多段经历**：识别重复块并把画像第 N 条写进第 N 段（不再靠出现顺序硬猜）
-- **选项闸门**：值不在页面选项里就阻塞在 `*-todo.md`（带建议 + 全部选项），不静默乱填
+- **低打扰暂填**：有来源的中置信度字段可先填并标记；唯一、相似度 ≥0.60 的页面实际选项可暂选；并列/弱候选或无来源个人事实留空；完成后统一确认/修改，默认不阻塞其它字段
+- **选项闸门**：精确/归一化值直接采用；暂选的近似项必须是页面真实选项原文且显式标记，填充器仍只精确点选；并列候选留空待最终选择
 - **选项探测**：`probeOptions` 只读读出自定义下拉的真实选项，供编译阶段判闸门
 - **时间粒度自适应**：画像只存最细的日期；组件要年/年月/年月日都能填，
   多余精度按组件粒度截断并如实上报；页面要得更细时进 todo（**绝不拿 01 凑日号**）
@@ -337,7 +342,7 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 - canvas/图片型验证码、滑块验证、iframe 内的表单
 - 需要跨页/分步向导的表单（每步都要重新扫描）
 - 只读/被上次简历解析锁定的字段（写不进去 → 如实报错）
-- **中文缩写**（北大 → 北京大学）：只能进建议列表，不会自动选——想一次命中就把它写进站点记忆（`90_memory.py add-option`）
+- **中文缩写**（北大 → 北京大学）：相似度低于暂选阈值，不会自动选也不会暂选，只列候选——想一次命中就把它写进站点记忆（`90_memory.py add-option`）
 
 ## 5. 常见坑
 
@@ -353,9 +358,9 @@ python $SKILL/scripts/95_lint_notes.py --paths references/adapters/<host>.md --f
 | 自定义组件取不到值 | `input.value` 是空 | 值在显示层：`readDisplay` 按框架 `display_value_selector` → `[class*=display-value]` → 最近 label 文本依次兜底 |
 | 弹层里点错了 | 同一页有多个已渲染的隐藏下拉 / tooltip / 日历面板 | 面板取「离触发元素最近的**可见**弹层」，并用 `isNonPanel` 黑名单排除 tooltip/日期面板；选项只取叶子 |
 | 合成 `el.click()` 没反应 | React 代理事件不认 | 先用 MCP `act` 真实点击并通过 `snapshot/diff` 回读；仍失败才走 `cdp.mjs click`，或直接调 `__reactFiber` 上的 `onClick`（`strategies.md` §8.4） |
-| 选项文本对不上 | 「北京」vs「北京市」 | 归一化相等（0.98）才自动点；包含（0.5–0.8）与中文缩写（0.45）**只进 suggestions**；用 `add-option` 记下对照后下次直接命中 |
+| 选项文本不完全相同 | 「北京」vs「北京市」 | 只有唯一最高候选且相似度 ≥0.60 才暂选页面原文并列入最终复核；并列/更弱候选留空；`add-option` 记录用户确认的映射后下次直接精确命中 |
 | 多段经历填串了 | 两段「学校名称」抢同一条画像 | 扫描器给 `block` 0/1…，编译器按 `(区块, 块)` 定记录序号；若 `summary.multiBlock = 0` 说明没识别出重复块 → 补 `layout.group_class` |
-| 必填判定 | 星号在字段块里，不在控件上 | 扫描器做「字段块 + 星号/必填字样 + 框架信号（`.ant-form-item-required` / `.el-form-item.is-required`）」三级判定，标注 `requiredConfidence`；medium/low 一律列进 todo 让人工确认 |
+| 必填判定 | 星号在字段块里，不在控件上 | 扫描器做「字段块 + 必填字样 + 框架信号」三级判定并标置信度；medium/low 有来源时先暂填、最终复核是否必填，不在填充前打断；没有值仍留空并纳入最终缺口 |
 | 字段名带噪声 | 「毕业时间（必填）」匹配不上字典 | 扫描器同时给 `label`（给人看）与 `labelNorm`（去噪声）；字典/记忆一律走 `labelNorm` |
 | 合成 click 假成功（radio/React 受控组件） | `r.click()` 后 `checked=true`、回读也有值，**但没进 React store**——页面一重渲染勾选就丢 | radio/开关优先用 MCP `act` 真实点击；MCP 明确失败才用 `cdp.mjs revalclick/clickn`；填完后再做一次重渲染后回读。 |
 | **select 直写 `option.value` 假成功**（mokahr 实测） | store 里确实有值（如 `0`），但 `display-value` 为空、字段残留「这是必填项」，整表报「申请表含有错误」——而**真实点选后 store 存的是选项标签原文** | `25_mokahr_fiber.js` 已改成「**label 优先写**，回读不符才回退 `option.value`」（多数情况下 label 直写即可，不必开面板）；仍失败就回到真实点击。**表单级唯一权威判据 = 提交按钮文案**（只读不点） |

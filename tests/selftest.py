@@ -76,12 +76,13 @@ def main():
     rc, out = run("40_build_mapping.py", "--scan", scan,
                   "--out", os.path.join(tmp, "m.json"), "--todo", os.path.join(tmp, "todo.md"), data_dir=tmp)
     built = json.load(open(os.path.join(tmp, "m.json"), encoding="utf-8"))
-    check("退出码 2 = 有阻塞项", rc == 2, f"rc={rc}")
-    check("生成了待问用户清单", built["todo_count"] > 0, f"todo={built['todo_count']}")
-    check("未映射的必填项进了 todo（不猜）",
-          any(t["type"] in ("missing-required", "unmapped-required") for t in
-              json.load(open(os.path.join(tmp, "m.json"), encoding="utf-8"))["meta"] and
-              [{"type": x} for x in []]) or built["todo_count"] > 0)
+    check("默认 review-first：存在缺口仍返回 0，可先填可用字段", rc == 0, f"rc={rc}")
+    check("生成了填充后集中确认清单", built["todo_count"] > 0 and built.get("review_count") == built["todo_count"], f"review={built.get('review_count')}")
+    check("未映射/缺值必填仍进入最终清单（但不阻塞其它字段）",
+          any(t["type"] in ("missing-required", "unmapped-required") for t in built["review"]))
+    rc_strict, _ = run("40_build_mapping.py", "--scan", scan, "--strict",
+                       "--out", os.path.join(tmp, "m-strict.json"), "--todo", os.path.join(tmp, "todo-strict.md"), data_dir=tmp)
+    check("--strict 保留旧式填前阻塞行为", rc_strict == 2, f"rc={rc_strict}")
 
     print("4) 问答记忆闭环")
     rc, out = run("90_memory.py", "add-qa", "--question", "您使用某社交平台的频率", "--answer", "中低频", data_dir=tmp)
@@ -200,6 +201,39 @@ def main():
     check("e2e 合成表单覆盖可写日期组件路径",
           'id="birthYm"' in fixture_source and 'class="ant-picker"' in fixture_source
           and "__dateWrites" in fixture_source)
+    # 低打扰暂选的相似度阈值：编译器与组件 API 快路径必须用同一个数（否则同一表单上两套判定）
+    thr_py = re.search(r"^REVIEW_OPTION_THRESHOLD\s*=\s*([0-9.]+)", open(os.path.join(SCRIPTS, "40_build_mapping.py"), encoding="utf-8").read(), re.M)
+    thr_js = re.search(r"const REVIEW_OPTION_THRESHOLD = ([0-9.]+);", fiber_source)
+    check("暂选阈值在编译器与 fiber 快路径里一致",
+          bool(thr_py) and bool(thr_js) and float(thr_py.group(1)) == float(thr_js.group(1)),
+          f"py={thr_py and thr_py.group(1)} js={thr_js and thr_js.group(1)}")
+    check("两条填充路径都输出 needsReview", "needsReview" in fill_source and "needsReview" in fiber_source)
+    # fiber 快路径的暂选判定：直接抽取脚本里的实现用 node 跑一遍，防止与 Python 口径漂移
+    if node and 'const REVIEW_OPTION_THRESHOLD' in fiber_source:
+        norm_line = next(l for l in fiber_source.splitlines() if l.strip().startswith('const norm = s =>'))
+        helper = fiber_source[fiber_source.index('const REVIEW_OPTION_THRESHOLD'):fiber_source.index('const needsReview = []')]
+        harness = ("const CONFIG = {};\n" + norm_line + "\n" + helper + "\n"
+                   "const r = { exact: optionScore('男', '男'), normalized: optionScore('北 京', '北京'),"
+                   " contains: optionScore('北京', '北京市'), abbr: optionScore('北大', '北京大学'),"
+                   " pick: judgeOption('北京', [{label:'北京市'}, {label:'上海市'}]),"
+                   " tie: judgeOption('北京', [{label:'北京市'}, {label:'北京区'}]),"
+                   " weak: judgeOption('北大', [{label:'北京大学'}, {label:'清华大学'}]) };\n"
+                   "console.log(JSON.stringify(r));\n")
+        hp = os.path.join(tmp, "fiber_option_helpers.js")
+        open(hp, "w", encoding="utf-8").write(harness)
+        p = subprocess.run([node, hp], capture_output=True, text=True, encoding="utf-8")
+        try:
+            fh = json.loads((p.stdout or "").strip().splitlines()[-1])
+        except Exception:
+            fh = {}
+        check("fiber 选项打分与 Python 口径一致",
+              fh.get("exact") == 1.0 and fh.get("normalized") == 0.98 and fh.get("abbr") == 0.45
+              and abs((fh.get("contains") or 0) - 0.7) < 1e-9,
+              (p.stdout or "")[-200:] + (p.stderr or "")[-200:])
+        check("fiber 只在唯一强候选时暂选（并列/过弱候选不猜）",
+              isinstance(fh.get("pick"), dict) and fh["pick"].get("label") == "北京市"
+              and fh.get("tie") is None and fh.get("weak") is None,
+              json.dumps(fh, ensure_ascii=False))
 
     print("8) 标签归一化与选项打分（选项匹配只出建议）")
     check("norm_label 去「（必填）」", jaa_lib.norm_label("毕业时间（必填）") == jaa_lib.norm_label("毕业时间"))
@@ -221,7 +255,7 @@ def main():
     check("中文缩写（北大→北京大学）不自动使用，但进建议",
           (not auto2) and any(a["text"] == "北京大学" for a in alts2), str(alts2))
 
-    print("9) 选项闸门（不自动改值）与多段经历记录序号")
+    print("9) 低打扰暂填（来源可追溯）与多段经历记录序号")
     check("模板占位符不会被填进 mapping（YYYY-MM-DD / <姓名> / TODO）",
           "f9" not in built["mapping"], json.dumps(built["mapping"], ensure_ascii=False))
     prof = json.load(open(os.path.join(REPO, "assets", "profile.template.json"), encoding="utf-8"))
@@ -247,15 +281,69 @@ def main():
     rc, out = run("40_build_mapping.py", "--scan", p9, "--out", os.path.join(tmp, "m9.json"),
                   "--todo", os.path.join(tmp, "t9.md"), "--profile", prof_path, data_dir=tmp)
     b9 = json.load(open(os.path.join(tmp, "m9.json"), encoding="utf-8"))
-    check("选项对不上 → 不写进 mapping（绝不自动改值）", "g1" not in b9["mapping"] and "g2" not in b9["mapping"],
+    check("近似但唯一的选项按经验暂选并写入 mapping",
+          (b9["mapping"].get("g1") or {}).get("v") == "男"
+          and (b9["mapping"].get("g2") or {}).get("v") == "北京市",
           json.dumps(b9["mapping"], ensure_ascii=False))
-    by_uid9 = {t["uid"]: t for t in b9["todo"]}
-    check("选项对不上 → 生成 option-choice 阻塞项", b9.get("todo") and by_uid9.get("g1", {}).get("type") == "option-choice",
-          json.dumps(list(by_uid9), ensure_ascii=False))
-    check("选项对不上 → 带出页面全部选项", by_uid9.get("g1", {}).get("options") == ["男", "女"])
-    check("选项对不上 → 给建议但不采用", any(s["text"] == "北京市" for s in by_uid9.get("g2", {}).get("suggestions", [])))
-    check("选项对不上的字段进 todo，但画像里有值且选项精确匹配的字段照常写入",
-          b9["mapping"].get("g3") == "示例姓名", json.dumps(b9["mapping"], ensure_ascii=False))
+    by_uid9 = {t["uid"]: t for t in b9["review"]}
+    check("暂选项进入最终复核清单且不阻塞默认流程",
+          rc == 0 and by_uid9.get("g1", {}).get("type") == "prefill-review"
+          and by_uid9.get("g1", {}).get("status") == "prefilled"
+          and by_uid9.get("g1", {}).get("blocking") is False)
+    check("暂选项保留原值、所选值、依据与全部选项",
+          by_uid9.get("g2", {}).get("original_value") == "北京"
+          and by_uid9.get("g2", {}).get("value") == "北京市"
+          and by_uid9.get("g2", {}).get("options") == ["北京市", "上海市"]
+          and b9["meta"]["g2"].get("source", "").endswith("option-judged"))
+    check("精确值照常填，且无须标为暂定", b9["mapping"].get("g3") == "示例姓名"
+          and b9["meta"]["g3"].get("review") is False)
+
+    # strict 模式：不做经验暂选（回到旧的填前确认行为）
+    rc9s, _ = run("40_build_mapping.py", "--scan", p9, "--strict", "--out", os.path.join(tmp, "m9s.json"),
+                  "--todo", os.path.join(tmp, "t9s.md"), "--profile", prof_path, data_dir=tmp)
+    b9s = json.load(open(os.path.join(tmp, "m9s.json"), encoding="utf-8"))
+    check("strict 模式不暂选近似选项且退出码 2",
+          rc9s == 2 and "g1" not in b9s["mapping"] and "g2" not in b9s["mapping"],
+          f"rc={rc9s} " + json.dumps(b9s["mapping"], ensure_ascii=False))
+
+    # 页面问题涉及用户个人事实时无画像证据不代猜；多个近似选项并列也不强行选择。
+    scanF = {"host": "facts.example.com", "url": "https://facts.example.com/x", "platform": {"framework": "antd"},
+             "fields": [fld("f1", "是否获得国家级专利", "custom-select", "附加信息", -1, ["是", "否"])]}
+    pf = os.path.join(tmp, "scan-facts.json")
+    json.dump(scanF, open(pf, "w", encoding="utf-8"), ensure_ascii=False)
+    run("40_build_mapping.py", "--scan", pf, "--out", os.path.join(tmp, "mf.json"),
+        "--todo", os.path.join(tmp, "tf.md"), "--profile", prof_path, data_dir=tmp)
+    bf = json.load(open(os.path.join(tmp, "mf.json"), encoding="utf-8"))
+    check("没有事实依据时不猜测专利/是非题",
+          "f1" not in bf["mapping"] and any(t["uid"] == "f1" and t["status"] == "unfilled" for t in bf["review"]))
+
+    prof_tie = json.load(open(prof_path, encoding="utf-8"))
+    prof_tie.setdefault("job", {})["intended_city"] = "北京"
+    pt = os.path.join(tmp, "profile-tie.json")
+    json.dump(prof_tie, open(pt, "w", encoding="utf-8"), ensure_ascii=False)
+    scan_tie = {"host": "tie.example.com", "url": "https://tie.example.com/x", "platform": {"framework": "antd"},
+                "fields": [fld("t1", "期望工作城市", "custom-select", "申请信息", -1, ["北京市", "北京区"])]}
+    p_tie = os.path.join(tmp, "scan-tie.json")
+    json.dump(scan_tie, open(p_tie, "w", encoding="utf-8"), ensure_ascii=False)
+    run("40_build_mapping.py", "--scan", p_tie, "--out", os.path.join(tmp, "mt.json"),
+        "--todo", os.path.join(tmp, "tt.md"), "--profile", pt, data_dir=tmp)
+    bt = json.load(open(os.path.join(tmp, "mt.json"), encoding="utf-8"))
+    check("相似度并列时不猜，留空并交最终选择",
+          "t1" not in bt["mapping"] and any(t["uid"] == "t1" and t["type"] == "option-choice" for t in bt["review"]))
+
+    prof_weak = json.load(open(prof_path, encoding="utf-8"))
+    prof_weak.setdefault("job", {})["intended_city"] = "北大"
+    pw = os.path.join(tmp, "profile-weak.json")
+    json.dump(prof_weak, open(pw, "w", encoding="utf-8"), ensure_ascii=False)
+    scan_weak = {"host": "weak.example.com", "url": "https://weak.example.com/x", "platform": {"framework": "antd"},
+                 "fields": [fld("w1", "期望工作城市", "custom-select", "申请信息", -1, ["北京大学", "清华大学"])]}
+    p_weak = os.path.join(tmp, "scan-weak.json")
+    json.dump(scan_weak, open(p_weak, "w", encoding="utf-8"), ensure_ascii=False)
+    run("40_build_mapping.py", "--scan", p_weak, "--out", os.path.join(tmp, "mw.json"),
+        "--todo", os.path.join(tmp, "tw.md"), "--profile", pw, data_dir=tmp)
+    bw = json.load(open(os.path.join(tmp, "mw.json"), encoding="utf-8"))
+    check("相似度低于阈值（缩写猜测）不暂填", "w1" not in bw["mapping"]
+          and any(t["uid"] == "w1" and t["type"] == "option-choice" for t in bw["review"]))
 
     scan10 = {"host": "rec.example.com", "url": "https://rec.example.com/x", "at": "2026-01-01T00:00:00Z",
               "platform": {"framework": "mokahr"},

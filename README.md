@@ -7,13 +7,20 @@ own widgets** (custom dropdowns, date pickers, file inputs), verifies programmat
 the result back to you for review.
 
 > **It never submits.** Buttons matching *submit / apply / send / next / pay / delete* are hard-blocked
-> inside the fill script. When anything is ambiguous it **asks the user** — it does not guess.
+> inside the fill script. Evidence-backed uncertain values are tentatively prefilled and explicitly
+> marked for a final review; unsupported personal facts are left blank rather than invented.
 >
 > **Personal data can never reach this repo.** Everything personal lives in the gitignored
 > `<runtime>/data/`; site notes must use placeholders. The leak guard builds a denylist from the
 > profile itself (name / phone / birth date / native place / school / employer / local paths) and
 > fails the test suite if any of it shows up in a publishable file — see
 > [Leak guard](#leak-guard-personal-data-must-never-reach-the-repo).
+
+**最近更新（v1.5.0）**
+- 🕊️ **低打扰预填 + 填后集中确认**：`40_build_mapping.py` 默认 review-first；有来源的中置信度字段和唯一、足够相近的页面选项先暂填，附来源/置信度/理由，统一放进最终复核清单。
+- 🧭 无事实来源、选项并列/相似度过低、日期精度不足、附件缺失等内容仍留空，但不阻塞其它字段继续填；绝不代猜专利/奖项/同意等个人事实。
+- ✅ 填充和程序校验完成后一次提供「接受全部 / 修改指定字段 / 保持留空」；提交按钮仍硬拦截。旧式填前阻塞可显式 `--strict`。
+- 🧪 selftest 覆盖唯一候选暂选、并列候选留空、事实题不编造与 strict 兼容；e2e 检查暂定标记贯穿到填充结果。
 
 **最近更新（v1.4.0）**
 - 📥 **站点沉淀同步**：新增 5 份 adapter 笔记 —— i.zhaopin.com（Vue2+iView 在线简历，组件直写）、
@@ -71,10 +78,7 @@ almost nothing.
   controlled picker input can be a display-only "fake success" — and only falls back to a verified
   text write when no component signal exists or the panel cannot be opened.
   A `probeOptions` mode opens dropdowns **read-only** and returns every option text.
-- **Option gate, never a guess** — option matching only auto-picks on *exact* or *normalized-equal*
-  (whitespace/punctuation/full-width insensitive) text. Contains (北京→北京市) and Chinese-abbreviation
-  (北大→北京大学) matches are emitted as **suggestions** and become `option-choice` questions instead.
-  The calendar engine likewise refuses to fall back to "nearest available day".
+- **Option gate with provisional judgment** — exact/normalized values fill directly. A unique page option scoring ≥0.60 may be temporarily chosen from actual page options and is marked for final confirmation; ties or weak matches stay blank. The calendar engine never falls back to the nearest available day.
 - **Adaptive time granularity** — the profile stores only the finest date (`1999-09-15`). Year-only,
   year-month, and full-date components all get filled: the filler reads the component's granularity
   (`type`, plus `placeholder`/`name`/`id` regex hints — deliberately *not* the label) and truncates,
@@ -83,8 +87,8 @@ almost nothing.
 - **Composite year+month widgets** — `mode: 'period'` fills 2/3/4-segment controls (year-month,
   year-month-day, start~end), trying `2023 / 2023年` and `09 / 9 / 9月 / 09月` spellings per segment,
   and is idempotent.
-- **Compiled mapping + questions** (`40_build_mapping.py`) — turns `scan + probe + dictionary + profile + memory`
-  into `mapping.json` (uid → value) **and** a `todo.md` list of things a human must answer.
+- **Compiled prefill + final review** (`40_build_mapping.py`) — turns `scan + probe + dictionary + profile + memory`
+  into a usable `mapping.json` plus a `todo.md` review sheet. Evidence-backed medium-confidence matches and unique close option matches are marked provisional; unsupported facts and ambiguous/weak choices stay blank. Default mode continues filling; `--strict` restores fill-before-confirm blocking.
 - **Programmatic verification** (`30_verify.py`) — format checks (phone/email/ID/date), consistency
   against the profile, completeness (required + attachments + page errors), an **option gate**
   (is the filled value actually one of the page's options?), and unmapped fields — grouped by section/record.
@@ -123,10 +127,10 @@ python scripts/40_build_mapping.py --scan examples/example.scan.json     # will 
 #    tabs new <url> → wait(for="selector", value="form, input, textarea") → evaluate(page, <10_scan_form.js>)
 #    save the returned JSON to data/runs/<host>-scan.json
 
-# 3) compile mapping + the "ask the user" list
+# 3) compile a provisional mapping + a final review sheet (default keeps going even if review items remain)
 python scripts/40_build_mapping.py --scan data/runs/<host>-scan.json
-#    exit code 2 = there are blocking questions -> ask the user, then:
-#    python scripts/90_memory.py add-qa --question "<question text>" --answer "<answer>"
+#    use --strict only if the user explicitly wants confirmation before filling
+#    python scripts/40_build_mapping.py --scan data/runs/<host>-scan.json --strict
 
 # 4) in browseros-neo MCP: run 20_fill.js with the mapping and a short budget
 #    evaluate(page, <scripts/20_fill.js with MAPPING, maxRunMs=18000>, timeout=25000)
@@ -137,10 +141,13 @@ python scripts/40_build_mapping.py --scan data/runs/<host>-scan.json
 python scripts/30_verify.py --state data/runs/<host>-state.json --scan data/runs/<host>-scan.json \
     --mapping data/runs/<host>-mapping.json
 
-# 6) record what was learned
+# 6) present actual field values + provisional reasons + unresolved blanks to the user once;
+#    apply requested edits with --answers, recompile/re-fill idempotently, and verify again.
+
+# 7) record what was learned (after review)
 python scripts/90_memory.py record --host <host> --scan ... --mapping ... --fill-result '{...}' --notes "..."
 
-# 7) optional: real-browser end-to-end self-test (opens one tab, closes it, SKIPs without a browser)
+# 8) optional: real-browser end-to-end self-test (opens one tab, closes it, SKIPs without a browser)
 python tests/browser_e2e.py
 ```
 
@@ -151,7 +158,7 @@ scripts/10_scan_form.js       # page: scan controls, infer names, detect framewo
 scripts/15_dump_state.js      # page: export current field values/required/errors
 scripts/20_fill.js            # page: fill (submit buttons blocked) + probeOptions
 scripts/30_verify.py          # local: state vs profile/dictionary checks (incl. option gate)
-scripts/40_build_mapping.py   # local: compile mapping + human-question list
+scripts/40_build_mapping.py   # local: compile prefill mapping + post-fill review list (optional --strict)
 scripts/90_memory.py          # local: site memory / Q&A memory / aliases / option map / run log
 scripts/95_lint_notes.py      # local: leak lint for publishable files (profile-driven) + --fix redaction
 scripts/cdp.mjs               # local Node fallback: take over the same page only when MCP cannot continue
@@ -175,10 +182,11 @@ tests/selftest.py             # no-browser test suite (incl. leak guard + config
 | Rule | Where enforced |
 |------|----------------|
 | Never click submit/apply/send/pay/delete/next | `SUBMIT_RE` + `assertSafe()` in `20_fill.js`; reported as `submit_buttons_untouched` |
-| Never invent a value | unmapped/missing/ambiguous → `todo.md`; `20_fill.js` records `failed` with a reason instead of guessing |
-| Never silently pick a near-miss option | option gate in `40_build_mapping.py` + `scoreOption` threshold 0.98 in `20_fill.js`; contains/abbreviation matches are suggestions only |
+| Never invent personal facts | no evidence / tied candidate / low-similarity option → keep blank and continue; every sourced provisional value is marked with its reason for final review |
+| Never silently choose an option | exact/normalized matches fill directly; a unique approximate option scoring ≥0.60 may be temporarily selected from the page's actual choices, but is marked for final confirmation; ties or weaker matches stay blank |
+| Never block the whole form on a review item | default `40_build_mapping.py` compiles a prefill plus a final review list; `--strict` opts into old fill-before-confirm blocking |
 | Never fall back to an approximate date | `calendarPick()` returns `false` instead of picking the nearest enabled day |
-| Never invent date precision | the profile stores the finest date; the filler only *truncates* (1999-09-15 → 1999-09 → 1999) and reports the drop. A page needing a finer level than the profile has becomes a `date-granularity` question — it never defaults the day to `01` |
+| Never invent date precision | the profile stores the finest date; the filler only *truncates* (1999-09-15 → 1999-09 → 1999) and reports the drop. A page needing finer precision leaves that field blank for final review; it never defaults the day to `01` |
 | Never write into a field it could not read back | every write is followed by a read-back; a mismatch is reported as `failed`, not swallowed |
 | Consent checkboxes (privacy/terms) stay untouched | not filled unless the user explicitly asks |
 | Personal data never enters the repo | `jaa_lib.DATA_DIR` = `<runtime env>/data` (gitignored), override with `$JAA_DATA_DIR`. Enforced by the **leak guard**: `jaa_lib.sensitive_tokens()` builds a denylist from `data/profile.json` + Q&A memory, and any of those values (name / phone / email / birth date / native place / school / major / employer / resume filename / local path) found in a publishable file fails `tests/selftest.py`. Run `python scripts/95_lint_notes.py` (or `--fix`) after writing site notes; a line that legitimately needs a real value (e.g. the site's own public option list) opts out with a `jaa-leak-allow` comment |
@@ -240,24 +248,22 @@ MIT — see [LICENSE](LICENSE).
 文件上传）自动填入，程序化校验后交给你审核。
 
 > **绝不代替你提交**：脚本内硬拦截 *提交/投递/立即申请/发送/下一步/支付/删除* 类按钮；
-> 遇到不确定（字段名认不出、选项对不上、控件写不进）**一律问你，不猜、不静默**。
+> 有来源的不确定项先暂填并注明依据，填充与校验完成后再集中让你确认/修改；没有事实依据的个人问题留空而不编造。
 
 ### 六步流程
 
 1. **扫描**：`scripts/10_scan_form.js` → 控件类型 + 字段名候选 + **归一化字段名** + 必填（带可信度）+
    选项 + **区块 / 重复块 / 组件框架 / 日期粒度**；多段经历拿到 `block = 0,1,2…`
-2. **编译**：`scripts/40_build_mapping.py` → `mapping.json`（uid→值）＋ `todo.md`（必须问你的清单）。
-   自研下拉先跑 `20_fill.js` 的 `OPTS.probeOptions = true` 探测真实选项，再用 `--probe` 并进来。
-   日期字段写成 `{v, granularity}`：值保留画像完整精度，粒度是页面要求
-3. **问你**：把阻塞项一次问完（含 `option-choice`：值对不上时列出建议 + 页面全部选项；
-   含 `date-granularity`：页面要年月日但画像只有年月）；
-   答案用 `add-qa` / `add-alias` / **`add-option`** 记进记忆（下次自动命中）
-4. **填入**：`scripts/20_fill.js`（带提交拦截；选项只在「原文相等 / 归一化相等」时才点，
-   包含与中文缩写匹配只给建议；日期按组件粒度自适应截断并如实上报；写不进去会明确报错）
-5. **校验**：`scripts/15_dump_state.js` + `scripts/30_verify.py --scan ...`
-   （格式 / 与画像一致性 / 完整性 / **选项闸门** / 未映射；按区块与第几段分组；
-   时间粒度截断单独列一行，**不算冲突**）
-6. **沉淀**：`scripts/90_memory.py record` → 站点记忆（字段→取值 + 区块/块 + 控件配方 + 选项目录 + 
+2. **编译暂定映射**：`scripts/40_build_mapping.py` 默认 review-first，产出 `mapping.json`（uid→值）与
+   `todo.md`（填后复核清单）。画像/记忆有证据的内容先填；唯一且相似度 ≥0.60 的实际页面选项可暂选并标注。
+   并列/过弱候选、无来源的个人事实、日期精度不足则留空，继续其它字段。自研下拉可先 `--probe`。
+3. **填入**：`scripts/20_fill.js`（带提交拦截；只点页面的原文/归一化选项，暂选值已转换为页面选项原文；
+   日期优先用组件；写不进去会明确报错）。此阶段不为普通复核项打断用户。
+4. **校验**：`scripts/15_dump_state.js` + `scripts/30_verify.py --scan ...`
+   （格式 / 与画像一致性 / 完整性 / **选项闸门** / 未映射；按区块与第几段分组；时间粒度截断不算冲突）
+5. **最终确认**：将实际填入值与来源、暂定项与理由、留空缺口及页面错误一次性交给用户；让用户选择「接受全部 / 修改指定项 / 保持留空」。
+   有修改时用 `--answers` 重编、同页幂等重填并复核。脚本绝不代提交；需要旧式填前确认可用 `--strict`。
+6. **沉淀**：`scripts/90_memory.py record` → 站点记忆（字段→取值 + 区块/块 + 控件配方 + 选项目录 +
    「简历值→页面选项」对照 + 成功失败计数）+ 运行日志
 
 ### 日期与时间粒度（只存最细的）
