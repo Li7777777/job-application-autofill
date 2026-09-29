@@ -21,6 +21,8 @@ the result back to you for review.
 - 🧭 无事实来源、选项并列/相似度过低、日期精度不足、附件缺失等内容仍留空，但不阻塞其它字段继续填；绝不代猜专利/奖项/同意等个人事实。
 - ✅ 填充和程序校验完成后一次提供「接受全部 / 修改指定字段 / 保持留空」；提交按钮仍硬拦截。旧式填前阻塞可显式 `--strict`。
 - 🧪 selftest 覆盖唯一候选暂选、并列候选留空、事实题不编造与 strict 兼容；e2e 检查暂定标记贯穿到填充结果。
+- 📥 同步本地站点沉淀：新增 `references/adapters/campus.dewu.com.md`（飞书 atsx + formily；fiber `form.values/errors` 对账、
+  年份粒度控件必须走 `onChange`、重复块取叶子项）；`SKILL.md` 的 `verified_sites` 补上得物。
 
 **最近更新（v1.4.0）**
 - 📥 **站点沉淀同步**：新增 5 份 adapter 笔记 —— i.zhaopin.com（Vue2+iView 在线简历，组件直写）、
